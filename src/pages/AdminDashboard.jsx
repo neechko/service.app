@@ -307,9 +307,17 @@ export default function AdminDashboard() {
                         ) : (
                             workers.map((worker) => (
                                 <div key={worker.id} className="glass-card rounded-2xl p-6">
-                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center mb-3">
-                                        <span className="text-white font-bold text-lg">{worker.full_name?.[0]?.toUpperCase() || 'W'}</span>
-                                    </div>
+                                    {worker.avatar_url ? (
+                                        <img
+                                            src={worker.avatar_url}
+                                            alt={worker.full_name}
+                                            className="w-12 h-12 rounded-full object-cover mb-3"
+                                        />
+                                    ) : (
+                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center mb-3">
+                                            <span className="text-white font-bold text-lg">{worker.full_name?.[0]?.toUpperCase() || 'W'}</span>
+                                        </div>
+                                    )}
                                     <h3 className="text-lg font-bold text-white">{worker.full_name}</h3>
                                     <p className="text-zinc-400 text-sm">{worker.phone}</p>
                                     <p className="text-xs text-zinc-500 mt-2">Joined {formatDate(worker.created_at)}</p>
