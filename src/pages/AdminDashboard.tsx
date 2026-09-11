@@ -2,6 +2,7 @@ import { useEffect, useState, FormEvent, ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database";
+import { showConfirm, showAlert } from "../lib/dialog"; // ✅ TAMBAHKAN INI
 
 // Tipe dasar dari database
 type Service = Database["public"]["Tables"]["services"]["Row"];
@@ -101,16 +102,23 @@ export default function AdminDashboard() {
 
   async function handleChangeRole(userId: string, newRole: string) {
     const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
-    if (error) alert("Failed to update role: " + error.message);
+    if (error) await showAlert({ title: 'Error', message: "Failed to update role: " + error.message, type: 'danger' });
     else fetchAllData();
   }
 
   async function handleDeleteUser(userId: string, userName: string) {
-    if (!confirm(`Are you sure you want to delete user "${userName}"? This will remove their profile data.`)) return;
+    const confirmed = await showConfirm({
+      title: 'Delete User',
+      message: `Are you sure you want to delete user "${userName}"?\nThis will remove their profile data.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger',
+    });
+    if (!confirmed) return;
     
     const { error } = await supabase.from("profiles").delete().eq("id", userId);
     
-    if (error) alert("Failed to delete user: " + error.message);
+    if (error) await showAlert({ title: 'Error', message: "Failed to delete user: " + error.message, type: 'danger' });
     else fetchAllData();
   }
 
@@ -120,9 +128,9 @@ export default function AdminDashboard() {
       .from("orders")
       .update({ worker_id: selectedWorker, status: "paid" })
       .eq("id", assigningOrder.id);
-    if (error) alert("Failed: " + error.message);
+    if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
     else {
-      alert("Worker assigned successfully!");
+      await showAlert({ title: 'Success', message: "Worker assigned successfully!", type: 'success' });
       setAssigningOrder(null);
       setSelectedWorker("");
       fetchAllData();
@@ -158,11 +166,11 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (editingService) {
       const { error } = await supabase.from("services").update(serviceForm).eq("id", editingService.id);
-      if (error) alert("Failed: " + error.message);
+      if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
       else { setEditingService(null); fetchAllData(); }
     } else {
       const { error } = await supabase.from("services").insert([serviceForm]);
-      if (error) alert("Failed: " + error.message);
+      if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
       else { setShowAddService(false); fetchAllData(); }
     }
   }
@@ -173,7 +181,8 @@ export default function AdminDashboard() {
   }
 
   async function handleDeleteService(service: Service) {
-    if (!confirm(`Delete "${service.name}"?`)) return;
+    const confirmed = await showConfirm({ title: 'Delete Service', message: `Delete "${service.name}"?`, type: 'danger' });
+    if (!confirmed) return;
     await supabase.from("services").delete().eq("id", service.id);
     fetchAllData();
   }
@@ -202,11 +211,11 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (editingCategory) {
       const { error } = await supabase.from("categories").update(categoryForm).eq("id", editingCategory.id);
-      if (error) alert("Failed: " + error.message);
+      if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
       else { setEditingCategory(null); fetchAllData(); }
     } else {
       const { error } = await supabase.from("categories").insert([categoryForm]);
-      if (error) alert("Failed: " + error.message);
+      if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
       else { setShowAddCategory(false); fetchAllData(); }
     }
   }
@@ -219,10 +228,11 @@ export default function AdminDashboard() {
   async function handleDeleteCategory(category: Category) {
     const { data } = await supabase.from("services").select("id").eq("category", category.slug);
     if (data && data.length > 0) {
-      alert(`Cannot delete: ${data.length} services still use this category.`);
+      await showAlert({ title: 'Cannot Delete', message: `${data.length} services still use this category.`, type: 'warning' });
       return;
     }
-    if (!confirm(`Delete "${category.name}"?`)) return;
+    const confirmed = await showConfirm({ title: 'Delete Category', message: `Delete "${category.name}"?`, type: 'danger' });
+    if (!confirmed) return;
     await supabase.from("categories").delete().eq("id", category.id);
     fetchAllData();
   }
@@ -371,7 +381,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* ✅ DIPERBAIKI: Tombol Assign/Reassign selalu muncul */}
                   <div className="flex gap-2">
                     <button onClick={() => navigate("/order/" + order.id)} className="flex-1 btn-secondary text-sm">
                       View Details

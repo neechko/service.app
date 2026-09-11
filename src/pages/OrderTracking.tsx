@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Database } from '../types/database'
 import OrderChat from '../components/OrderChat'
+import { compressImage } from '../lib/imageUtils' 
 
 // Tipe Order dengan relasi lengkap
 type Order = Database['public']['Tables']['orders']['Row'] & {
@@ -25,7 +26,7 @@ type ProgressUpdate = Database['public']['Tables']['progress_updates']['Row']
 
 export default function OrderTracking() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate() // Hook untuk navigasi
+  const navigate = useNavigate()
   const [order, setOrder] = useState<Order | null>(null)
   const [progressUpdates, setProgressUpdates] = useState<ProgressUpdate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
@@ -100,19 +101,22 @@ export default function OrderTracking() {
 
     setUploadingProgress(true)
     try {
-      // 1. Upload Screenshot ke Storage
-      const fileExt = progressFile.name.split('.').pop()
-      const fileName = `${order!.id}/${userRole}-${Date.now()}.${fileExt}`
+      const fileToUpload = await compressImage(progressFile)
+      
+      // Paksa ekstensi menjadi .jpg agar konsisten dengan hasil kompresi
+      const fileName = `${order!.id}/${userRole}-${Date.now()}.jpg`
       const filePath = `progress/${fileName}`
 
       const { error: uploadError } = await supabase.storage
         .from('screenshots')
-        .upload(filePath, progressFile)
+        .upload(filePath, fileToUpload, {
+          contentType: 'image/jpeg' // Pastikan tipe konten benar
+        })
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage.from('screenshots').getPublicUrl(filePath)
 
-      // 2. Insert ke tabel progress_updates
+      // 3. Insert ke tabel progress_updates
       const { error: progressError } = await supabase
         .from('progress_updates')
         .insert([{
@@ -123,7 +127,7 @@ export default function OrderTracking() {
         }])
       if (progressError) throw progressError
 
-      // 3. Update status & persentase di tabel orders
+      // 4. Update status & persentase di tabel orders
       const newStatus = progressPercentage === 100 ? 'completed' : 'in_progress'
       const { error: orderError } = await supabase.from('orders').update({
         current_percentage: progressPercentage,
@@ -324,7 +328,6 @@ export default function OrderTracking() {
 
           {/* Action Buttons Area */}
           <div className="flex gap-3">
-
             <button 
               onClick={() => navigate(-1)} 
               className="flex-1 btn-secondary text-center py-2.5 rounded-lg transition-all"
@@ -343,6 +346,7 @@ export default function OrderTracking() {
           </div>
         </div>
 
+        {/* Modal Update Progress */}
         {showProgressModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-md">
@@ -375,6 +379,7 @@ export default function OrderTracking() {
                     required
                     className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-2.5 text-zinc-100 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-hover"
                   />
+                  <p className="text-xs text-zinc-500 mt-1">Large images will be compressed automatically to save space.</p>
                 </div>
 
                 <div>
@@ -390,8 +395,12 @@ export default function OrderTracking() {
 
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setShowProgressModal(false)} className="flex-1 btn-secondary">Batal</button>
-                  <button type="submit" disabled={uploadingProgress} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 rounded-lg transition-all">
-                    {uploadingProgress ? 'Mengupload...' : 'Kirim Update'}
+                  <button 
+                    type="submit" 
+                    disabled={uploadingProgress} 
+                    className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 rounded-lg transition-all"
+                  >
+                    {uploadingProgress ? 'Compressing & Uploading...' : 'Kirim Update'}
                   </button>
                 </div>
               </form>

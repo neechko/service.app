@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database";
+import { showPrompt, showAlert } from "../lib/dialog"; // ✅ TAMBAHKAN INI
 
 // Tipe Order dengan relasi service
 type Order = Database["public"]["Tables"]["orders"]["Row"] & {
@@ -44,19 +45,29 @@ export default function MyOrders() {
 
   async function handleCancelOrder(orderId: string, orderStatus: string) {
     if (orderStatus === "in_progress") {
-      alert(
-        "Cannot cancel: Worker is already working on this order. Please contact support or use the chat.",
-      );
+      await showAlert({
+        title: "Cannot Cancel",
+        message: "Worker is already working on this order. Please contact support or use the chat.",
+        type: "warning",
+      });
       return;
     }
     if (orderStatus === "completed" || orderStatus === "cancelled") {
-      alert("This order cannot be cancelled.");
+      await showAlert({
+        title: "Cannot Cancel",
+        message: "This order cannot be cancelled.",
+        type: "warning",
+      });
       return;
     }
 
-    const reason = prompt(
-      "Please provide a reason for cancellation (optional):",
-    );
+    // ✅ Menggunakan Custom Prompt
+    const reason = await showPrompt({
+      title: "Cancel Order",
+      message: "Please provide a reason for cancellation (optional):",
+      placeholder: "e.g. Changed my mind...",
+    });
+    
     if (reason === null) return; // User membatalkan prompt
 
     setLoading(true);
@@ -70,9 +81,17 @@ export default function MyOrders() {
       .eq("id", orderId);
 
     if (error) {
-      alert("Failed to cancel order: " + error.message);
+      await showAlert({
+        title: "Error",
+        message: "Failed to cancel order: " + error.message,
+        type: "danger",
+      });
     } else {
-      alert("Order cancelled successfully.");
+      await showAlert({
+        title: "Success",
+        message: "Order cancelled successfully.",
+        type: "success",
+      });
       fetchOrders(); // Refresh list
     }
     setLoading(false);
@@ -227,17 +246,12 @@ export default function MyOrders() {
                       {formatRupiah(order.total_price)}
                     </p>
                     <div className="flex items-center gap-3">
-
-                      {(order.status === "pending" ||
-                        order.status === "paid") && (
+                      {(order.status === "pending" || order.status === "paid") && (
                         <button
                           type="button"
                           onClick={(e) => {
-                            e.stopPropagation(); 
-                            handleCancelOrder(
-                              order.id,
-                              order.status || "pending",
-                            );
+                            e.stopPropagation();
+                            handleCancelOrder(order.id, order.status || "pending");
                           }}
                           className="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-1 rounded hover:bg-red-500/10 transition"
                         >

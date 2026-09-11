@@ -1,8 +1,9 @@
 import { useEffect, useState, FormEvent, ChangeEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database";
-import { Link } from 'react-router-dom'
+import { compressImage } from "../lib/imageUtils";
+import { showAlert } from "../lib/dialog";
 
 // Tipe Order dengan relasi services dan profiles (consumer)
 type Order = Database["public"]["Tables"]["orders"]["Row"] & {
@@ -46,7 +47,7 @@ export default function WorkerDashboard() {
       .from("orders")
       .select("*, services(name), profiles:consumer_id(full_name, phone)")
       .eq("worker_id", user.id)
-      .neq("status", "completed")
+      .in("status", ["pending", "paid", "in_progress"])
       .order("created_at", { ascending: false });
 
     setOrders((data as Order[]) || []);
@@ -60,19 +61,26 @@ export default function WorkerDashboard() {
     setSuccess("");
 
     if (!screenshot) {
-      setError("Screenshot is required!");
+      await showAlert({
+        title: "Missing Screenshot",
+        message: "Screenshot is required!",
+        type: "warning",
+      });
       setUploading(false);
       return;
     }
 
     try {
-      const fileExt = screenshot.name.split(".").pop();
-      const fileName = `${selectedOrder!.id}/${Date.now()}.${fileExt}`;
+      // Kompres gambar sebelum upload
+      const fileToUpload = await compressImage(screenshot);
+      const fileName = `${selectedOrder!.id}/worker-${Date.now()}.jpg`;
       const filePath = `progress/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("screenshots")
-        .upload(filePath, screenshot);
+        .upload(filePath, fileToUpload, {
+          contentType: "image/jpeg",
+        });
 
       if (uploadError) throw uploadError;
 
@@ -113,13 +121,18 @@ export default function WorkerDashboard() {
         setSelectedOrder(null);
       }, 2000);
     } catch (err) {
-      setError("Failed to upload: " + (err as Error).message);
+      await showAlert({
+        title: "Error",
+        message: "Failed to upload: " + (err as Error).message,
+        type: "danger",
+      });
     }
 
     setUploading(false);
   }
 
-  const formatRupiah = (angka: number) => {
+  const formatRupiah = (angka: number | null | undefined) => {
+    if (!angka) return "Rp 0";
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
@@ -179,7 +192,7 @@ export default function WorkerDashboard() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-bold text-white">
-                      {order.services?.name}
+                      {order.services?.name || "Unknown Service"}
                     </h3>
                     <p className="text-zinc-500 text-sm">
                       Order #{order.id.slice(0, 8)}
@@ -190,8 +203,8 @@ export default function WorkerDashboard() {
                       order.status === "completed"
                         ? "bg-green-500/10 text-green-400 border-green-500/30"
                         : order.status === "in_progress"
-                          ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                          : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                        ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                        : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                     }`}
                   >
                     {(order.status || "pending").replace("_", " ")}
@@ -233,13 +246,13 @@ export default function WorkerDashboard() {
                   <div className="flex justify-between text-xs mb-1.5">
                     <span className="text-zinc-500">Current Progress</span>
                     <span className="text-primary-light font-semibold">
-                      {order.current_percentage}%
+                      {order.current_percentage || 0}%
                     </span>
                   </div>
                   <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden">
                     <div
                       className="h-2 rounded-full bg-gradient-to-r from-primary to-purple-500 transition-all"
-                      style={{ width: `${order.current_percentage}%` }}
+                      style={{ width: `${order.current_percentage || 0}%` }}
                     ></div>
                   </div>
                 </div>
@@ -283,7 +296,7 @@ export default function WorkerDashboard() {
                 Update Progress
               </h2>
               <p className="text-zinc-400 text-sm mb-6">
-                {selectedOrder.services?.name}
+                {selectedOrder.services?.name || "Unknown Service"}
               </p>
 
               {error && (
@@ -330,6 +343,9 @@ export default function WorkerDashboard() {
                     required
                     className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-2.5 text-zinc-100 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-hover"
                   />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Large images will be compressed automatically to save space.
+                  </p>
                 </div>
 
                 <div>
@@ -366,7 +382,7 @@ export default function WorkerDashboard() {
                     disabled={uploading}
                     className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold py-2.5 rounded-lg transition-all"
                   >
-                    {uploading ? "Uploading..." : "Upload"}
+                    {uploading ? "Compressing & Uploading..." : "Upload"}
                   </button>
                 </div>
               </form>

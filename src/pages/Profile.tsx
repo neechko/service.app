@@ -2,6 +2,7 @@ import { useEffect, useState, FormEvent, ChangeEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { Database } from '../types/database'
+import { compressImage } from '../lib/imageUtils'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -65,18 +66,25 @@ export default function Profile() {
     if (avatarFile) {
       try {
         setUploadingAvatar(true)
-        const fileExt = avatarFile.name.split('.').pop()
-        const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`
+        
+        const fileToUpload = await compressImage(avatarFile)
+        
+        const fileName = `${user.id}/avatar-${Date.now()}.jpg`
+        // Catatan: Pastikan Anda sudah membuat bucket bernama 'avatars' (Public) di Supabase Storage.
+        // Jika belum, ganti 'avatars' menjadi 'screenshots' sesuai setup awal Anda.
         const filePath = `avatars/${fileName}`
 
         const { error: uploadError } = await supabase.storage
-          .from('screenshots') // Atau buat bucket terpisah 'avatars'
-          .upload(filePath, avatarFile, { upsert: true })
+          .from('avatars') 
+          .upload(filePath, fileToUpload, { 
+            upsert: true,
+            contentType: 'image/jpeg' // Pastikan tipe konten benar agar browser bisa merendernya
+          })
 
         if (uploadError) throw uploadError
 
         const { data: { publicUrl } } = supabase.storage
-          .from('screenshots')
+          .from('avatars')
           .getPublicUrl(filePath)
 
         avatarUrl = publicUrl
@@ -230,7 +238,7 @@ export default function Profile() {
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setAvatarFile(e.target.files?.[0] || null)}
                 className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-2.5 text-zinc-100 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-hover"
               />
-              <p className="text-xs text-zinc-500 mt-1">Leave empty to keep current avatar.</p>
+              <p className="text-xs text-zinc-500 mt-1">Leave empty to keep current avatar. Large images will be compressed automatically.</p>
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -246,7 +254,7 @@ export default function Profile() {
                 disabled={saving || uploadingAvatar}
                 className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold py-2.5 rounded-lg transition-all"
               >
-                {saving ? 'Saving...' : uploadingAvatar ? 'Uploading...' : 'Save Changes'}
+                {saving ? 'Saving...' : uploadingAvatar ? 'Compressing & Uploading...' : 'Save Changes'}
               </button>
             </div>
           </form>
