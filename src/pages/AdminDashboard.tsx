@@ -263,7 +263,7 @@ export default function AdminDashboard() {
   const stats = {
     totalOrders: orders.length,
     activeOrders: orders.filter(
-      (o) => o.status !== "completed" && o.status !== "cancelled"
+      (o) => o.status !== "completed" && o.status !== "cancelled",
     ).length,
     totalRevenue: orders
       .filter((o) => o.status === "completed")
@@ -406,10 +406,10 @@ export default function AdminDashboard() {
                         order.status === "completed"
                           ? "bg-green-500/10 text-green-400 border-green-500/30"
                           : order.status === "in_progress"
-                          ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                          : order.status === "paid"
-                          ? "bg-purple-500/10 text-purple-400 border-purple-500/30"
-                          : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+                            ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                            : order.status === "paid"
+                              ? "bg-purple-500/10 text-purple-400 border-purple-500/30"
+                              : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
                       }`}
                     >
                       {(order.status || "pending").replace("_", " ")}
@@ -478,10 +478,20 @@ export default function AdminDashboard() {
             ) : (
               workers.map((worker) => (
                 <div key={worker.id} className="glass-card rounded-2xl p-6">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center mb-3">
-                    <span className="text-white font-bold text-lg">
-                      {worker.full_name?.[0]?.toUpperCase() || "W"}
-                    </span>
+                  <div className="mb-3">
+                    {worker.avatar_url ? (
+                      <img
+                        src={worker.avatar_url}
+                        alt={worker.full_name}
+                        className="w-12 h-12 rounded-full object-cover border-2 border-primary"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">
+                          {worker.full_name?.[0]?.toUpperCase() || "W"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <h3 className="text-lg font-bold text-white">
                     {worker.full_name}
