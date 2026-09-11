@@ -5,20 +5,18 @@ import { useNavigate } from 'react-router-dom'
 export default function ResetPassword() {
   const [password, setPassword] = useState<string>('')
   const [confirmPassword, setConfirmPassword] = useState<string>('')
-  const [loading, setLoading] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(true) // Default true saat mengecek token
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Cek apakah ada hash token di URL (dari link email)
-    const hashParams = new URLSearchParams(window.location.hash.substring(1))
-    const accessToken = hashParams.get('access_token')
-    const type = hashParams.get('type')
-
-    if (type !== 'recovery' || !accessToken) {
-      setError('Invalid or expired reset link. Please request a new one.')
-    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        setError('Link reset tidak valid atau sudah kadaluarsa. Silakan minta link baru dari halaman login.')
+      }
+      setLoading(false) // Selesai mengecek token
+    })
   }, [])
 
   async function handleResetPassword(e: FormEvent<HTMLFormElement>) {
@@ -28,17 +26,18 @@ export default function ResetPassword() {
     setSuccess('')
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
+      setError('Password tidak cocok')
       setLoading(false)
       return
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+      setError('Password minimal 6 karakter')
       setLoading(false)
       return
     }
 
+    // Mengupdate password menggunakan session recovery yang sudah aktif
     const { error: updateError } = await supabase.auth.updateUser({
       password: password
     })
@@ -46,11 +45,36 @@ export default function ResetPassword() {
     if (updateError) {
       setError(updateError.message)
     } else {
-      setSuccess('Password updated successfully! Redirecting to login...')
+      setSuccess('Password berhasil diperbarui! Mengalihkan ke halaman login...')
       setTimeout(() => navigate('/login'), 2000)
     }
 
     setLoading(false)
+  }
+
+  if (loading && !error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+      </div>
+    )
+  }
+
+  if (error && !success) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="glass-card rounded-2xl p-8 max-w-md w-full text-center">
+          <h1 className="text-2xl font-bold text-white mb-4">Link Tidak Valid</h1>
+          <p className="text-red-400 mb-6">{error}</p>
+          <button 
+            onClick={() => navigate('/login')} 
+            className="bg-primary hover:bg-primary-hover text-white font-semibold py-2 px-6 rounded-lg transition"
+          >
+            Kembali ke Login
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
