@@ -11,6 +11,7 @@ import MyOrders from './pages/MyOrders'
 import WorkerDashboard from './pages/WorkerDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
+import ResetPassword from './pages/ResetPassword'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -203,6 +204,7 @@ function App() {
         {/* 1. Rute Auth: Jika sudah login, tendang ke home (/) */}
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         
         {/* 2. Rute Publik/Protected: Jika belum login, tendang ke /login */}
         <Route path="/" element={user ? <Catalog /> : <Navigate to="/login" />} />

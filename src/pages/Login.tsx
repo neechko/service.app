@@ -1,52 +1,57 @@
-import { useState, FormEvent, ChangeEvent } from 'react'
-import { supabase } from '../lib/supabase'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, FormEvent, ChangeEvent } from "react";
+import { supabase } from "../lib/supabase";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function Login() {
-  const [email, setEmail] = useState<string>('')
-  const [password, setPassword] = useState<string>('')
-  const [loading, setLoading] = useState<boolean>(false)
-  const [error, setError] = useState<string>('')
-  const [success, setSuccess] = useState<string>('')
-  const [isForgotPassword, setIsForgotPassword] = useState<boolean>(false)
-  const navigate = useNavigate()
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
+  const [isForgotPassword, setIsForgotPassword] = useState<boolean>(false);
+  const navigate = useNavigate();
 
   async function handleLogin(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
 
     const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
-    })
+    });
 
     if (authError) {
-      setError(authError.message)
-      setLoading(false)
-      return
+      setError(authError.message);
+      setLoading(false);
+      return;
     }
 
-    navigate('/')
+    navigate("/");
   }
 
   async function handleResetPassword(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin, // Akan mengarahkan kembali ke aplikasi setelah klik link
-    })
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      email,
+      {
+        redirectTo: `${window.location.origin}/reset-password`,
+      },
+    );
 
     if (resetError) {
-      setError(resetError.message)
+      setError(resetError.message);
     } else {
-      setSuccess('Link reset password telah dikirim ke email Anda. Silakan cek inbox/spam.')
+      setSuccess(
+        "Link reset password telah dikirim ke email Anda. Silakan cek inbox/spam.",
+      );
     }
-    setLoading(false)
+    setLoading(false);
   }
 
   return (
@@ -59,15 +64,19 @@ export default function Login() {
       <div className="relative w-full max-w-md fade-in">
         <div className="text-center mb-8">
           <div className="inline-flex w-14 h-14 rounded-2xl items-center justify-center mb-4">
-            <img src="/favicon.png" alt="" className="w-8 h-8 rounded-lg object-contain" />
+            <img
+              src="/favicon.png"
+              alt=""
+              className="w-8 h-8 rounded-lg object-contain"
+            />
           </div>
           <h1 className="text-3xl font-bold text-white">
-            {isForgotPassword ? 'Reset Password' : 'Welcome Back'}
+            {isForgotPassword ? "Reset Password" : "Welcome Back"}
           </h1>
           <p className="text-zinc-500 mt-2">
-            {isForgotPassword 
-              ? 'Masukkan email Anda untuk menerima link reset.' 
-              : 'Sign in to your Primora account'}
+            {isForgotPassword
+              ? "Masukkan email Anda untuk menerima link reset."
+              : "Sign in to your Primora account"}
           </p>
         </div>
 
@@ -87,11 +96,15 @@ export default function Login() {
             // FORM RESET PASSWORD
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Email Address</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Email Address
+                </label>
                 <input
                   type="email"
                   value={email}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setEmail(e.target.value)
+                  }
                   required
                   className="input-modern"
                   placeholder="you@example.com"
@@ -102,11 +115,15 @@ export default function Login() {
                 disabled={loading}
                 className="w-full bg-primary hover:bg-primary-hover disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold py-3 rounded-lg transition-all duration-200 active:scale-[0.98]"
               >
-                {loading ? 'Mengirim...' : 'Kirim Link Reset'}
+                {loading ? "Mengirim..." : "Kirim Link Reset"}
               </button>
               <button
                 type="button"
-                onClick={() => { setIsForgotPassword(false); setError(''); setSuccess(''); }}
+                onClick={() => {
+                  setIsForgotPassword(false);
+                  setError("");
+                  setSuccess("");
+                }}
                 className="w-full text-center text-sm text-zinc-400 hover:text-white transition mt-4"
               >
                 ← Kembali ke Login
@@ -116,29 +133,37 @@ export default function Login() {
             // FORM LOGIN BIASA
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Email Address</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Email Address
+                </label>
                 <input
                   type="email"
                   value={email}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setEmail(e.target.value)
+                  }
                   required
                   className="input-modern"
                   placeholder="you@example.com"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Password</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Password
+                </label>
                 <input
                   type="password"
                   value={password}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setPassword(e.target.value)
+                  }
                   required
                   minLength={6}
                   className="input-modern"
                   placeholder="Enter your password"
                 />
               </div>
-              
+
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -154,15 +179,18 @@ export default function Login() {
                 disabled={loading}
                 className="w-full bg-primary hover:bg-primary-hover disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold py-3 rounded-lg transition-all duration-200 active:scale-[0.98]"
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? "Signing in..." : "Sign In"}
               </button>
             </form>
           )}
 
           {!isForgotPassword && (
             <div className="mt-6 text-center text-sm text-zinc-500">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-primary hover:text-primary-light font-medium">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                className="text-primary hover:text-primary-light font-medium"
+              >
                 Create one
               </Link>
             </div>
@@ -170,5 +198,5 @@ export default function Login() {
         </div>
       </div>
     </div>
-  )
+  );
 }
