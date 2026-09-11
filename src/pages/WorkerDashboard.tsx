@@ -1,18 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, FormEvent, ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Database } from '../types/database'
+
+// Tipe Order dengan relasi services dan profiles (consumer)
+type Order = Database['public']['Tables']['orders']['Row'] & {
+  services: {
+    name: string
+  } | null
+  profiles: {
+    full_name: string
+    phone: string | null
+  } | null
+}
 
 export default function WorkerDashboard() {
   const navigate = useNavigate()
-  const [orders, setOrders] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [percentage, setPercentage] = useState(25)
-  const [notes, setNotes] = useState('')
-  const [screenshot, setScreenshot] = useState(null)
-  const [uploading, setUploading] = useState(false)
-  const [success, setSuccess] = useState('')
-  const [error, setError] = useState('')
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [percentage, setPercentage] = useState<number>(25)
+  const [notes, setNotes] = useState<string>('')
+  const [screenshot, setScreenshot] = useState<File | null>(null)
+  const [uploading, setUploading] = useState<boolean>(false)
+  const [success, setSuccess] = useState<string>('')
+  const [error, setError] = useState<string>('')
 
   useEffect(() => {
     fetchOrders()
@@ -30,15 +42,15 @@ export default function WorkerDashboard() {
     const { data } = await supabase
       .from('orders')
       .select('*, services(name), profiles:consumer_id(full_name, phone)')
-      .eq('worker_id', user.id) // ✅ DIPERBAIKI: 'joki_id' diganti menjadi 'worker_id'
+      .eq('worker_id', user.id)
       .neq('status', 'completed')
       .order('created_at', { ascending: false })
 
-    setOrders(data || [])
+    setOrders((data as Order[]) || [])
     setLoading(false)
   }
 
-  async function handleUploadProgress(e) {
+  async function handleUploadProgress(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setUploading(true)
     setError('')
@@ -52,7 +64,7 @@ export default function WorkerDashboard() {
 
     try {
       const fileExt = screenshot.name.split('.').pop()
-      const fileName = `${selectedOrder.id}/${Date.now()}.${fileExt}`
+      const fileName = `${selectedOrder!.id}/${Date.now()}.${fileExt}`
       const filePath = `progress/${fileName}`
 
       const { error: uploadError } = await supabase.storage
@@ -68,7 +80,7 @@ export default function WorkerDashboard() {
       const { error: progressError } = await supabase
         .from('progress_updates')
         .insert([{
-          order_id: selectedOrder.id,
+          order_id: selectedOrder!.id,
           percentage: percentage,
           screenshot_url: publicUrl,
           notes: notes,
@@ -83,7 +95,7 @@ export default function WorkerDashboard() {
           status: percentage === 100 ? 'completed' : 'in_progress',
           completed_at: percentage === 100 ? new Date().toISOString() : null,
         })
-        .eq('id', selectedOrder.id)
+        .eq('id', selectedOrder!.id)
 
       if (orderError) throw orderError
 
@@ -97,13 +109,13 @@ export default function WorkerDashboard() {
       }, 2000)
 
     } catch (err) {
-      setError('Failed to upload: ' + err.message)
+      setError('Failed to upload: ' + (err as Error).message)
     }
 
     setUploading(false)
   }
 
-  const formatRupiah = (angka) => {
+  const formatRupiah = (angka: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -151,7 +163,7 @@ export default function WorkerDashboard() {
                     order.status === 'in_progress' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
                     'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
                   }`}>
-                    {order.status.replace('_', ' ')}
+                    {(order.status || 'pending').replace('_', ' ')}
                   </span>
                 </div>
 
@@ -166,11 +178,11 @@ export default function WorkerDashboard() {
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-border">
                     <span className="text-zinc-400">Game UID</span>
-                    <span className="text-white">{order.game_uid || '-'}</span> {/* ✅ DIPERBAIKI */}
+                    <span className="text-white">{order.game_uid || '-'}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-border">
                     <span className="text-zinc-400">Server</span>
-                    <span className="text-white capitalize">{order.game_server || '-'}</span> {/* ✅ DIPERBAIKI */}
+                    <span className="text-white capitalize">{order.game_server || '-'}</span>
                   </div>
                   <div className="flex justify-between py-1.5">
                     <span className="text-zinc-400">Total Amount</span>
@@ -235,7 +247,7 @@ export default function WorkerDashboard() {
                   </label>
                   <select
                     value={percentage}
-                    onChange={(e) => setPercentage(parseInt(e.target.value))}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setPercentage(parseInt(e.target.value))}
                     className="input-modern"
                   >
                     <option value={25}>25%</option>
@@ -252,7 +264,7 @@ export default function WorkerDashboard() {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setScreenshot(e.target.files[0])}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setScreenshot(e.target.files?.[0] || null)}
                     required
                     className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-2.5 text-zinc-100 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-hover"
                   />
@@ -264,7 +276,7 @@ export default function WorkerDashboard() {
                   </label>
                   <textarea
                     value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
                     rows={3}
                     placeholder="e.g. Chamber 1 cleared with 3 stars..."
                     className="input-modern resize-none"

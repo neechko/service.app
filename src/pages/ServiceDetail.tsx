@@ -1,20 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, FormEvent, ChangeEvent } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Database } from '../types/database'
+
+type Service = Database['public']['Tables']['services']['Row']
+type Category = Database['public']['Tables']['categories']['Row']
 
 export default function ServiceDetail() {
-  const { id } = useParams()
+  const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [service, setService] = useState(null)
-  const [categories, setCategories] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [ordering, setOrdering] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [service, setService] = useState<Service | null>(null)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [ordering, setOrdering] = useState<boolean>(false)
+  const [error, setError] = useState<string>('')
+  const [success, setSuccess] = useState<string>('')
 
-  const [uid, setUid] = useState('')
-  const [server, setServer] = useState('asia')
-  const [notes, setNotes] = useState('')
+  const [uid, setUid] = useState<string>('')
+  const [server, setServer] = useState<string>('asia')
+  const [notes, setNotes] = useState<string>('')
 
   useEffect(() => {
     fetchService()
@@ -22,7 +26,7 @@ export default function ServiceDetail() {
 
   async function fetchService() {
     const [serviceRes, categoriesRes] = await Promise.all([
-      supabase.from('services').select('*').eq('id', id).single(),
+      supabase.from('services').select('*').eq('id', id!).single(),
       supabase.from('categories').select('*')
     ])
 
@@ -35,7 +39,7 @@ export default function ServiceDetail() {
     setLoading(false)
   }
 
-  async function handleOrder(e) {
+  async function handleOrder(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setOrdering(true)
     setError('')
@@ -48,7 +52,6 @@ export default function ServiceDetail() {
       setOrdering(false)
       return
     }
-
 
     const { data: profileData } = await supabase
       .from('profiles')
@@ -68,14 +71,16 @@ export default function ServiceDetail() {
       return
     }
 
+    // Insert order ke database
+    // Catatan: kolom sudah di-rename menjadi game_uid dan game_server
     const { data, error: orderError } = await supabase
       .from('orders')
       .insert([{
         consumer_id: user.id,
-        service_id: id,
-        total_price: service.base_price,
-        account_email: uid,
-        account_password: server,
+        service_id: id!,
+        total_price: service!.base_price,
+        game_uid: uid,           // <-- Kolom sudah di-rename
+        game_server: server,     // <-- Kolom sudah di-rename
         notes: notes,
         status: 'pending',
         current_percentage: 0,
@@ -87,11 +92,11 @@ export default function ServiceDetail() {
       setOrdering(false)
     } else {
       setSuccess('Order placed successfully! Redirecting...')
-      setTimeout(() => navigate('/order/' + data[0].id), 2000)
+      setTimeout(() => navigate('/order/' + data![0].id), 2000)
     }
   }
 
-  const formatRupiah = (angka) => {
+  const formatRupiah = (angka: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -99,7 +104,7 @@ export default function ServiceDetail() {
     }).format(angka)
   }
 
-  const getCategoryName = (slug) => {
+  const getCategoryName = (slug: string) => {
     const cat = categories.find(c => c.slug === slug)
     return cat ? cat.name : slug
   }
@@ -172,7 +177,7 @@ export default function ServiceDetail() {
               <h3 className="font-semibold text-white mb-4">Security Guarantee</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
-                  'Verified & experienced boosters',
+                  'Verified & experienced workers',
                   'Real-time progress tracking',
                   'Funds held until completion',
                   'No cheats or hacks used',
@@ -215,7 +220,7 @@ export default function ServiceDetail() {
                   <input
                     type="text"
                     value={uid}
-                    onChange={(e) => setUid(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setUid(e.target.value)}
                     required
                     placeholder="e.g. 812345678"
                     className="input-modern"
@@ -228,7 +233,7 @@ export default function ServiceDetail() {
                   </label>
                   <select
                     value={server}
-                    onChange={(e) => setServer(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setServer(e.target.value)}
                     className="input-modern"
                   >
                     <option value="asia">Asia</option>
@@ -244,7 +249,7 @@ export default function ServiceDetail() {
                   </label>
                   <textarea
                     value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
                     rows={3}
                     placeholder="e.g. Don't use resin, skip daily, etc."
                     className="input-modern resize-none"

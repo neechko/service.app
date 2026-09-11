@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Database } from '../types/database'
+
+// Tipe Order dengan relasi service (karena query kita menggunakan .select('*, services(...)'))
+type Order = Database['public']['Tables']['orders']['Row'] & {
+  services: {
+    name: string
+    category: string
+  } | null
+}
 
 export default function MyOrders() {
   const navigate = useNavigate()
-  const [orders, setOrders] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [filter, setFilter] = useState<string>('all')
 
   useEffect(() => {
     fetchOrders()
@@ -27,11 +36,12 @@ export default function MyOrders() {
       .eq('consumer_id', user.id)
       .order('created_at', { ascending: false })
 
-    setOrders(data || [])
+    setOrders((data as Order[]) || [])
     setLoading(false)
   }
 
-  const formatRupiah = (angka) => {
+  const formatRupiah = (angka: number | null | undefined) => {
+    if (!angka) return 'Rp0'
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -39,21 +49,22 @@ export default function MyOrders() {
     }).format(angka)
   }
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric'
     })
   }
 
-  const getStatusStyle = (status) => {
-    const styles = {
+  const getStatusStyle = (status: string | null | undefined) => {
+    const styles: Record<string, string> = {
       completed: 'bg-green-500/10 text-green-400 border-green-500/30',
       in_progress: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
       paid: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
       pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
       cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
     }
-    return styles[status] || styles.pending
+    return styles[status || 'pending'] || styles.pending
   }
 
   const filteredOrders = orders.filter(order => {
@@ -134,7 +145,7 @@ export default function MyOrders() {
                         {order.services?.name}
                       </h3>
                       <span className={`px-2.5 py-0.5 rounded-md text-xs font-semibold uppercase border ${getStatusStyle(order.status)}`}>
-                        {order.status.replace('_', ' ')}
+                        {(order.status || 'pending').replace('_', ' ')}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-4 text-sm text-zinc-400">

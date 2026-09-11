@@ -1,18 +1,22 @@
-import { useState } from 'react'
+import { useState, FormEvent, ChangeEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { Link, useNavigate } from 'react-router-dom'
+import { Database } from '../types/database'
+
+// Ambil tipe untuk insert profil (opsional, untuk autocomplete)
+type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
 
 export default function Register() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [role, setRole] = useState('consumer')
-  const [phone, setPhone] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [email, setEmail] = useState<string>('')
+  const [password, setPassword] = useState<string>('')
+  const [fullName, setFullName] = useState<string>('')
+  const [role, setRole] = useState<ProfileInsert['role']>('consumer')
+  const [phone, setPhone] = useState<string>('')
+  const [loading, setLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string>('')
   const navigate = useNavigate()
 
-  async function handleRegister(e) {
+  async function handleRegister(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
     setError('')
@@ -74,7 +78,7 @@ export default function Register() {
               <input
                 type="text"
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)}
                 required
                 className="input-modern"
                 placeholder="John Doe"
@@ -88,7 +92,7 @@ export default function Register() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                 required
                 className="input-modern"
                 placeholder="you@example.com"
@@ -102,7 +106,7 @@ export default function Register() {
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)}
                 required
                 className="input-modern"
                 placeholder="+62 812 3456 7890"
@@ -116,7 +120,7 @@ export default function Register() {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                 required
                 minLength={6}
                 className="input-modern"
@@ -142,9 +146,9 @@ export default function Register() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setRole('worker')} // ✅ DIPERBAIKI: 'joki' diubah menjadi 'worker'
+                  onClick={() => setRole('worker')}
                   className={`py-3 px-4 rounded-lg border-2 transition-all text-sm font-medium ${
-                    role === 'worker' // ✅ DIPERBAIKI: kondisi 'joki' diubah menjadi 'worker'
+                    role === 'worker'
                       ? 'border-primary bg-primary/10 text-primary-light'
                       : 'border-border text-zinc-400 hover:border-zinc-600'
                   }`}

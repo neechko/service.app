@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom'
 import { supabase } from './lib/supabase'
+import { Database } from './types/database'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Catalog from './pages/Catalog'
@@ -11,11 +12,13 @@ import WorkerDashboard from './pages/WorkerDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
 
+type Profile = Database['public']['Tables']['profiles']['Row']
+
 function App() {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false)
 
   useEffect(() => {
     checkUser()
@@ -45,7 +48,7 @@ function App() {
     setLoading(false)
   }
 
-  async function fetchProfile(userId) {
+  async function fetchProfile(userId: string) { // ← TAMBAHKAN TIPE DI SINI
     const { data } = await supabase
       .from('profiles')
       .select('*')
@@ -101,8 +104,8 @@ function App() {
                 )}
 
                 {/* Worker Panel */}
-                {profile?.role === 'worker' && (  // ← GANTI dari 'joki'
-                  <Link to="/worker" className="btn-ghost text-sm">  {/* ← GANTI /joki jadi /worker */}
+                {profile?.role === 'worker' && (
+                  <Link to="/worker" className="btn-ghost text-sm">
                     Worker Panel
                   </Link>
                 )}
@@ -166,7 +169,7 @@ function App() {
                     My Orders
                   </Link>
                 )}
-                {profile?.role === 'worker' && (  // ← GANTI dari 'joki'
+                {profile?.role === 'worker' && (
                   <Link to="/worker" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">
                     Worker Panel
                   </Link>
@@ -194,9 +197,9 @@ function App() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
-        <Route path="/" element={user ? <Catalog /> : <Navigate to="/login" />} />
-        <Route path="/service/:id" element={user ? <ServiceDetail /> : <Navigate to="/login" />} />
-        <Route path="/order/:id" element={user ? <OrderTracking /> : <Navigate to="/login" />} />
+        <Route path="/" element={user ? <Catalog /> : <Navigate to="/" />} />
+        <Route path="/service/:id" element={user ? <ServiceDetail /> : <Navigate to="/" />} />
+        <Route path="/order/:id" element={user ? <OrderTracking /> : <Navigate to="/" />} />
         <Route path="/orders" element={user && profile?.role === 'consumer' ? <MyOrders /> : <Navigate to="/" />} />
         <Route path="/worker" element={user && profile?.role === 'worker' ? <WorkerDashboard /> : <Navigate to="/" />} />
         <Route path="/admin" element={user && profile?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" />} />

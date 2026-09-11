@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { Database } from '../types/database'
+
+// 1. Ambil tipe baris (Row) dari file database.ts yang sudah kita generate
+type Service = Database['public']['Tables']['services']['Row']
+type Category = Database['public']['Tables']['categories']['Row']
 
 export default function Catalog() {
-  const [services, setServices] = useState([])
-  const [categories, setCategories] = useState([])
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
+  // 2. TAMBAHKAN <TipeData> di setiap useState agar TypeScript tahu isinya nanti seperti apa
+  const [services, setServices] = useState<Service[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [isLoading, setIsLoading] = useState<boolean>(true)
 
   useEffect(() => {
     fetchData()
@@ -26,7 +32,8 @@ export default function Catalog() {
     setIsLoading(false)
   }
 
-  const formatRupiah = (angka) => {
+  // 3. Tambahkan tipe pada parameter fungsi
+  const formatRupiah = (angka: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -34,7 +41,7 @@ export default function Catalog() {
     }).format(angka)
   }
 
-  const getCategoryName = (slug) => {
+  const getCategoryName = (slug: string) => {
     const cat = categories.find(c => c.slug === slug)
     return cat ? cat.name : slug
   }
@@ -94,10 +101,11 @@ export default function Catalog() {
         <div className="flex flex-wrap gap-2 mb-10">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedCategory === 'all'
-              ? 'bg-primary text-white'
-              : 'bg-surface hover:bg-surface-hover text-zinc-400'
-              }`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              selectedCategory === 'all'
+                ? 'bg-primary text-white'
+                : 'bg-surface hover:bg-surface-hover text-zinc-400'
+            }`}
           >
             All Services
           </button>
@@ -105,10 +113,11 @@ export default function Catalog() {
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.slug)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedCategory === cat.slug
-                ? 'bg-primary text-white'
-                : 'bg-surface hover:bg-surface-hover text-zinc-400'
-                }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedCategory === cat.slug
+                  ? 'bg-primary text-white'
+                  : 'bg-surface hover:bg-surface-hover text-zinc-400'
+              }`}
             >
               {cat.name}
             </button>
@@ -118,7 +127,7 @@ export default function Catalog() {
         {/* Loading State */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map(i => (
+            {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="glass-card rounded-2xl p-6 h-64 pulse-soft"></div>
             ))}
           </div>
