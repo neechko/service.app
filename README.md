@@ -1,16 +1,69 @@
-# React + Vite
+# Service.app
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Service.app is a web-based platform designed to connect game players (consumers) with professional boosters (workers) for Genshin Impact services "Maybe in the future there will be other games added". The platform provides a secure ordering system, real-time progress tracking, and an integrated communication channel between users.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+*   **Public Catalog:** Users can browse available services and pricing without requiring an account.
+*   **Role-Based Access Control:** Distinct dashboards and workflows for Consumers, Workers, and Administrators.
+*   **Order Management:** Consumers can place, track, and cancel orders. Workers can update progress and upload proof of completion.
+*   **Integrated Chat:** A secure, order-specific chat system allowing consumers and assigned workers to share credentials and updates.
+*   **Admin Dashboard:** Comprehensive tools for administrators to manage users, services, categories, and assign workers to orders.
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+*   **Frontend Framework:** React with TypeScript
+*   **Build Tool:** Vite
+*   **Styling:** Tailwind CSS
+*   **Routing:** React Router DOM
+*   **Backend & Database:** Supabase (PostgreSQL, Authentication, Storage)
 
-## Expanding the Oxlint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Before running the project locally, ensure you have the following installed:
+*   Node.js (v16 or higher)
+*   npm (Node Package Manager)
+*   A Supabase account and project
+
+## Installation and Setup
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/neechko/service.app.git
+    cd service.app/primora-web
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+3.  **Configure Environment Variables:**
+    Create a `.env` file in the root directory and add your Supabase credentials:
+    ```env
+    VITE_SUPABASE_URL=your_supabase_project_url
+    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+    ```
+
+4.  **Setup Database:**
+    *   Go to your Supabase Dashboard -> SQL Editor.
+    *   Run the SQL script provided in `database.sql` to create the necessary tables, indexes, triggers, and Row Level Security (RLS) policies.
+    *   Go to Storage and create a new **Public** bucket named `screenshots` for progress image uploads.
+
+5.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
+    Open your browser and navigate to `http://localhost:5173`.
+
+## Deployment
+
+This project is configured for deployment on Vercel. 
+1. Push the code to your GitHub repository.
+2. Import the project into Vercel.
+3. Ensure the Environment Variables (`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`) are added in the Vercel project settings.
+4. Configure the Site URL and Redirect URLs in your Supabase Authentication settings to match your Vercel domain.
+
+## License
+
+This project is proprietary and confidential. All rights reserved.
