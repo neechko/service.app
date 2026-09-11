@@ -199,17 +199,24 @@ function App() {
         </nav>
       )}
 
-      <Routes>
+            <Routes>
+        {/* 1. Rute Auth: Jika sudah login, tendang ke home (/) */}
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
-        <Route path="/" element={user ? <Catalog /> : <Navigate to="/" />} />
-        <Route path="/service/:id" element={user ? <ServiceDetail /> : <Navigate to="/" />} />
-        <Route path="/order/:id" element={user ? <OrderTracking /> : <Navigate to="/" />} />
-        <Route path="/orders" element={user && profile?.role === 'consumer' ? <MyOrders /> : <Navigate to="/" />} />
-        <Route path="/worker" element={user && profile?.role === 'worker' ? <WorkerDashboard /> : <Navigate to="/" />} />
-        <Route path="/admin" element={user && profile?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" />} />
+        
+        {/* 2. Rute Publik/Protected: Jika belum login, tendang ke /login */}
+        <Route path="/" element={user ? <Catalog /> : <Navigate to="/login" />} />
+        <Route path="/service/:id" element={user ? <ServiceDetail /> : <Navigate to="/login" />} />
+        <Route path="/order/:id" element={user ? <OrderTracking /> : <Navigate to="/login" />} />
+        
+        {/* 3. Rute Berdasarkan Role: Jika belum login atau role salah, tendang ke /login */}
+        <Route path="/orders" element={user && profile?.role === 'consumer' ? <MyOrders /> : <Navigate to="/login" />} />
+        <Route path="/worker" element={user && profile?.role === 'worker' ? <WorkerDashboard /> : <Navigate to="/login" />} />
+        <Route path="/admin" element={user && profile?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
         <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
-        <Route path="*" element={<Navigate to="/" />} />
+        
+        {/* 4. Fallback: Arahkan ke home jika sudah login, atau login jika belum */}
+        <Route path="*" element={user ? <Navigate to="/" /> : <Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
   )
