@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Database } from '../types/database'
 import OrderChat from '../components/OrderChat'
-import { compressImage } from '../lib/imageUtils' 
+import { compressImage } from '../lib/imageUtils'
+import { showAlert } from '../lib/dialog' 
 
 // Tipe Order dengan relasi lengkap
 type Order = Database['public']['Tables']['orders']['Row'] & {
@@ -94,8 +95,9 @@ export default function OrderTracking() {
 
   async function handleProgressUpdate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    
     if (!progressFile) {
-      alert('Screenshot bukti progres wajib diupload!')
+      await showAlert({ title: 'Missing Screenshot', message: 'Screenshot bukti progres wajib diupload!', type: 'warning' })
       return
     }
 
@@ -103,20 +105,18 @@ export default function OrderTracking() {
     try {
       const fileToUpload = await compressImage(progressFile)
       
-      // Paksa ekstensi menjadi .jpg agar konsisten dengan hasil kompresi
       const fileName = `${order!.id}/${userRole}-${Date.now()}.jpg`
       const filePath = `progress/${fileName}`
 
       const { error: uploadError } = await supabase.storage
         .from('screenshots')
         .upload(filePath, fileToUpload, {
-          contentType: 'image/jpeg' // Pastikan tipe konten benar
+          contentType: 'image/jpeg'
         })
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage.from('screenshots').getPublicUrl(filePath)
 
-      // 3. Insert ke tabel progress_updates
       const { error: progressError } = await supabase
         .from('progress_updates')
         .insert([{
@@ -127,7 +127,6 @@ export default function OrderTracking() {
         }])
       if (progressError) throw progressError
 
-      // 4. Update status & persentase di tabel orders
       const newStatus = progressPercentage === 100 ? 'completed' : 'in_progress'
       const { error: orderError } = await supabase.from('orders').update({
         current_percentage: progressPercentage,
@@ -137,13 +136,13 @@ export default function OrderTracking() {
       
       if (orderError) throw orderError
 
-      alert('Progres berhasil diupdate!')
+      await showAlert({ title: 'Success', message: 'Progres berhasil diupdate!', type: 'success' })
       setShowProgressModal(false)
       setProgressFile(null)
       setProgressNotes('')
-      fetchOrder() // Refresh data halaman
+      fetchOrder()
     } catch (err) {
-      alert('Gagal update progres: ' + (err as Error).message)
+      await showAlert({ title: 'Error', message: 'Gagal update progres: ' + (err as Error).message, type: 'danger' })
     }
     setUploadingProgress(false)
   }
@@ -278,6 +277,22 @@ export default function OrderTracking() {
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-xs text-zinc-500 mb-1">Customer Notes</p>
               <p className="text-zinc-300 italic">"{order.notes}"</p>
+            </div>
+          )}
+
+          {order.status === 'cancelled' && (
+            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-400 font-semibold text-sm mb-1">⚠ Order Cancelled</p>
+              {order.cancel_reason && (
+                <p className="text-red-300 text-sm italic mb-2">
+                  Reason: "{order.cancel_reason}"
+                </p>
+              )}
+              {order.cancelled_at && (
+                <p className="text-red-400/70 text-xs">
+                  Cancelled at: {formatDate(order.cancelled_at)}
+                </p>
+              )}
             </div>
           )}
         </div>

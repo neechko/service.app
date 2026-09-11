@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database";
-import { showPrompt, showAlert } from "../lib/dialog"; // ✅ TAMBAHKAN INI
+import { showPrompt, showAlert } from "../lib/dialog";
 
 // Tipe Order dengan relasi service
 type Order = Database["public"]["Tables"]["orders"]["Row"] & {
@@ -61,14 +61,13 @@ export default function MyOrders() {
       return;
     }
 
-    // ✅ Menggunakan Custom Prompt
     const reason = await showPrompt({
       title: "Cancel Order",
       message: "Please provide a reason for cancellation (optional):",
       placeholder: "e.g. Changed my mind...",
     });
     
-    if (reason === null) return; // User membatalkan prompt
+    if (reason === null) return;
 
     setLoading(true);
     const { error } = await supabase
@@ -92,7 +91,7 @@ export default function MyOrders() {
         message: "Order cancelled successfully.",
         type: "success",
       });
-      fetchOrders(); // Refresh list
+      fetchOrders();
     }
     setLoading(false);
   }
@@ -239,6 +238,18 @@ export default function MyOrders() {
                         style={{ width: `${order.current_percentage || 0}%` }}
                       ></div>
                     </div>
+
+                    {order.status === "cancelled" && order.cancel_reason && (
+                      <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                        <p className="text-xs text-red-400 font-medium mb-1">Cancellation Reason:</p>
+                        <p className="text-sm text-red-300 italic">"{order.cancel_reason}"</p>
+                        {order.cancelled_at && (
+                          <p className="text-xs text-red-400/70 mt-1">
+                            Cancelled at: {formatDate(order.cancelled_at)}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-right flex flex-col items-end gap-2">
