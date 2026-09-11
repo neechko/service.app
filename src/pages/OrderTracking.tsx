@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, FormEvent, ChangeEvent } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Database } from '../types/database'
 import OrderChat from '../components/OrderChat'
@@ -25,12 +25,18 @@ type ProgressUpdate = Database['public']['Tables']['progress_updates']['Row']
 
 export default function OrderTracking() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useNavigate() // Hook untuk navigasi
   const [order, setOrder] = useState<Order | null>(null)
   const [progressUpdates, setProgressUpdates] = useState<ProgressUpdate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
+
+  const [showProgressModal, setShowProgressModal] = useState<boolean>(false)
+  const [progressPercentage, setProgressPercentage] = useState<number>(0)
+  const [progressNotes, setProgressNotes] = useState<string>('')
+  const [progressFile, setProgressFile] = useState<File | null>(null)
+  const [uploadingProgress, setUploadingProgress] = useState<boolean>(false)
 
   useEffect(() => {
     fetchOrder()
@@ -48,7 +54,6 @@ export default function OrderTracking() {
 
     setCurrentUserId(user.id)
 
-    // Ambil role user
     const { data: profileData } = await supabase
       .from('profiles')
       .select('role')
@@ -57,7 +62,6 @@ export default function OrderTracking() {
 
     if (profileData) setUserRole(profileData.role)
 
-    // Ambil detail order dengan relasi
     const { data: orderData, error } = await supabase
       .from('orders')
       .select(`
@@ -75,8 +79,8 @@ export default function OrderTracking() {
     }
 
     setOrder(orderData as Order)
+    setProgressPercentage(orderData.current_percentage || 0)
 
-    // Ambil progress updates
     const { data: progressData } = await supabase
       .from('progress_updates')
       .select('*')
@@ -85,6 +89,59 @@ export default function OrderTracking() {
 
     setProgressUpdates((progressData as ProgressUpdate[]) || [])
     setLoading(false)
+  }
+
+  async function handleProgressUpdate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!progressFile) {
+      alert('Screenshot bukti progres wajib diupload!')
+      return
+    }
+
+    setUploadingProgress(true)
+    try {
+      // 1. Upload Screenshot ke Storage
+      const fileExt = progressFile.name.split('.').pop()
+      const fileName = `${order!.id}/${userRole}-${Date.now()}.${fileExt}`
+      const filePath = `progress/${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('screenshots')
+        .upload(filePath, progressFile)
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage.from('screenshots').getPublicUrl(filePath)
+
+      // 2. Insert ke tabel progress_updates
+      const { error: progressError } = await supabase
+        .from('progress_updates')
+        .insert([{
+          order_id: order!.id,
+          percentage: progressPercentage,
+          screenshot_url: publicUrl,
+          notes: progressNotes || `Update oleh ${userRole}`,
+        }])
+      if (progressError) throw progressError
+
+      // 3. Update status & persentase di tabel orders
+      const newStatus = progressPercentage === 100 ? 'completed' : 'in_progress'
+      const { error: orderError } = await supabase.from('orders').update({
+        current_percentage: progressPercentage,
+        status: newStatus,
+        completed_at: progressPercentage === 100 ? new Date().toISOString() : null,
+      }).eq('id', order!.id)
+      
+      if (orderError) throw orderError
+
+      alert('Progres berhasil diupdate!')
+      setShowProgressModal(false)
+      setProgressFile(null)
+      setProgressNotes('')
+      fetchOrder() // Refresh data halaman
+    } catch (err) {
+      alert('Gagal update progres: ' + (err as Error).message)
+    }
+    setUploadingProgress(false)
   }
 
   const formatRupiah = (angka: number | null | undefined) => {
@@ -118,7 +175,6 @@ export default function OrderTracking() {
     return styles[status || 'pending'] || styles.pending
   }
 
-  // Cek apakah user ini pemilik order (consumer atau worker yang ditugaskan)
   const isAuthorized = order && currentUserId && (
     order.consumer_id === currentUserId ||
     order.worker_id === currentUserId ||
@@ -138,7 +194,9 @@ export default function OrderTracking() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <p className="text-zinc-400 mb-4">Order not found or you don't have access.</p>
-          <Link to="/" className="text-primary hover:underline">Back to catalog</Link>
+          <button onClick={() => navigate(-1)} className="text-primary hover:underline">
+            ← Go Back
+          </button>
         </div>
       </div>
     )
@@ -149,9 +207,9 @@ export default function OrderTracking() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-zinc-500 mb-8">
-          <Link to="/" className="hover:text-zinc-300 transition">Home</Link>
-          <span>/</span>
-          <Link to="/orders" className="hover:text-zinc-300 transition">My Orders</Link>
+          <button onClick={() => navigate(-1)} className="hover:text-zinc-300 transition flex items-center gap-1">
+            ← Back
+          </button>
           <span>/</span>
           <span className="text-zinc-300">Order #{order.id.slice(0, 8)}</span>
         </nav>
@@ -221,7 +279,7 @@ export default function OrderTracking() {
         </div>
 
         {/* Progress Updates Timeline */}
-        <div className="glass-card rounded-2xl p-6">
+        <div className="glass-card rounded-2xl p-6 mb-6">
           <h3 className="text-lg font-bold text-white mb-6">Progress Updates</h3>
 
           {progressUpdates.length === 0 ? (
@@ -233,32 +291,19 @@ export default function OrderTracking() {
             <div className="space-y-6">
               {progressUpdates.map((update) => (
                 <div key={update.id} className="relative pl-8 border-l-2 border-primary/30 pb-6 last:pb-0">
-                  {/* Timeline Dot */}
                   <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-primary border-2 border-background"></div>
-
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div>
                       <p className="text-primary-light font-bold text-lg">{update.percentage}% Complete</p>
                       <p className="text-zinc-500 text-xs">{formatDate(update.created_at)}</p>
                     </div>
                   </div>
-
                   {update.notes && (
                     <p className="text-zinc-300 text-sm mb-3">{update.notes}</p>
                   )}
-
                   {update.screenshot_url && (
-                    <a
-                      href={update.screenshot_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block max-w-sm"
-                    >
-                      <img
-                        src={update.screenshot_url}
-                        alt={`Progress ${update.percentage}%`}
-                        className="w-full rounded-lg border border-border hover:border-primary/50 transition-all"
-                      />
+                    <a href={update.screenshot_url} target="_blank" rel="noopener noreferrer" className="block max-w-sm">
+                      <img src={update.screenshot_url} alt={`Progress ${update.percentage}%`} className="w-full rounded-lg border border-border hover:border-primary/50 transition-all" />
                     </a>
                   )}
                 </div>
@@ -267,25 +312,90 @@ export default function OrderTracking() {
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="mt-6 flex gap-3">
-          <Link to="/orders" className="flex-1 btn-secondary text-center">
-            ← Back to My Orders
-          </Link>
-          {userRole === 'worker' && order.worker_id === currentUserId && order.status !== 'completed' && (
-            <Link to="/worker" className="flex-1 bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-lg transition-all text-center">
-              Update Progress
-            </Link>
-          )}
-        </div>
-        {/* Chat Section - Hanya tampilkan jika user adalah participant order */}
-        {(order.consumer_id === currentUserId || order.worker_id === currentUserId || userRole === 'admin') && (
-          <div className="mt-6">
+        <div className="flex flex-col gap-6">
+          {/* Chat Section */}
+          {(order.consumer_id === currentUserId || order.worker_id === currentUserId || userRole === 'admin') && (
             <OrderChat 
               order={order} 
               currentUserId={currentUserId!} 
               userRole={userRole || ''} 
             />
+          )}
+
+          {/* Action Buttons Area */}
+          <div className="flex gap-3">
+
+            <button 
+              onClick={() => navigate(-1)} 
+              className="flex-1 btn-secondary text-center py-2.5 rounded-lg transition-all"
+            >
+              ← Go Back
+            </button>
+
+            {(userRole === 'worker' || userRole === 'admin') && order.status !== 'completed' && order.status !== 'cancelled' && (
+              <button 
+                onClick={() => setShowProgressModal(true)}
+                className="flex-1 bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-lg transition-all text-center"
+              >
+                {userRole === 'admin' ? '🛡️ Admin Update Progress' : 'Update Progress'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {showProgressModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+              <h2 className="text-xl font-bold text-white mb-2">
+                {userRole === 'admin' ? 'Admin Update Progress' : 'Update Progress'}
+              </h2>
+              <p className="text-zinc-400 text-sm mb-6">{order!.services?.name}</p>
+
+              <form onSubmit={handleProgressUpdate} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">Persentase Progres</label>
+                  <select
+                    value={progressPercentage}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setProgressPercentage(parseInt(e.target.value))}
+                    className="input-modern w-full"
+                  >
+                    <option value={25}>25%</option>
+                    <option value={50}>50%</option>
+                    <option value={75}>75%</option>
+                    <option value={100}>100% (Selesai)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">Screenshot Bukti (Wajib)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setProgressFile(e.target.files?.[0] || null)}
+                    required
+                    className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-2.5 text-zinc-100 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-hover"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">Catatan (Opsional)</label>
+                  <textarea
+                    value={progressNotes}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setProgressNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Catatan untuk customer..."
+                    className="input-modern w-full resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowProgressModal(false)} className="flex-1 btn-secondary">Batal</button>
+                  <button type="submit" disabled={uploadingProgress} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 rounded-lg transition-all">
+                    {uploadingProgress ? 'Mengupload...' : 'Kirim Update'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 
