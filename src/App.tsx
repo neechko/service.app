@@ -39,13 +39,18 @@ function App() {
     }
   }, [])
 
-  async function checkUser() {
-    const { data: { session } } = await supabase.auth.getSession()
-    setUser(session?.user ?? null)
-    if (session?.user) {
-      await fetchProfile(session.user.id)
+    async function checkUser() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUser(session?.user ?? null)
+      if (session?.user) {
+        await fetchProfile(session.user.id)
+      }
+    } catch (error) {
+      console.error("Gagal mengecek user:", error)
+    } finally {
+      setLoading(false) 
     }
-    setLoading(false)
   }
 
   async function fetchProfile(userId: string) { // ← TAMBAHKAN TIPE DI SINI
