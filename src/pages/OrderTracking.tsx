@@ -337,7 +337,7 @@ export default function OrderTracking() {
                 onClick={() => setShowProgressModal(true)}
                 className="flex-1 bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-lg transition-all text-center"
               >
-                {userRole === 'admin' ? '🛡️ Admin Update Progress' : 'Update Progress'}
+                {userRole === 'admin' ? 'Admin Update Progress' : 'Update Progress'}
               </button>
             )}
           </div>
