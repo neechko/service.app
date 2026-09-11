@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Database } from '../types/database'
+import OrderChat from '../components/OrderChat'
 
 // Tipe Order dengan relasi lengkap
 type Order = Database['public']['Tables']['orders']['Row'] & {
@@ -277,6 +278,17 @@ export default function OrderTracking() {
             </Link>
           )}
         </div>
+        {/* Chat Section - Hanya tampilkan jika user adalah participant order */}
+        {(order.consumer_id === currentUserId || order.worker_id === currentUserId || userRole === 'admin') && (
+          <div className="mt-6">
+            <OrderChat 
+              order={order} 
+              currentUserId={currentUserId!} 
+              userRole={userRole || ''} 
+            />
+          </div>
+        )}
+
       </div>
     </div>
   )

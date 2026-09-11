@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Database } from '../types/database'
 
-// Tipe Order dengan relasi service (karena query kita menggunakan .select('*, services(...)'))
+// Tipe Order dengan relasi service
 type Order = Database['public']['Tables']['orders']['Row'] & {
   services: {
     name: string
@@ -40,8 +40,40 @@ export default function MyOrders() {
     setLoading(false)
   }
 
+  async function handleCancelOrder(orderId: string, orderStatus: string) {
+    if (orderStatus === 'in_progress') {
+      alert('Cannot cancel: Worker is already working on this order. Please contact support or use the chat.')
+      return
+    }
+    if (orderStatus === 'completed' || orderStatus === 'cancelled') {
+      alert('This order cannot be cancelled.')
+      return
+    }
+
+    const reason = prompt('Please provide a reason for cancellation (optional):')
+    if (reason === null) return // User membatalkan prompt
+
+    setLoading(true)
+    const { error } = await supabase
+      .from('orders')
+      .update({ 
+        status: 'cancelled',
+        cancel_reason: reason.trim() || 'No reason provided',
+        cancelled_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+
+    if (error) {
+      alert('Failed to cancel order: ' + error.message)
+    } else {
+      alert('Order cancelled successfully.')
+      fetchOrders() // Refresh list
+    }
+    setLoading(false)
+  }
+
   const formatRupiah = (angka: number | null | undefined) => {
-    if (!angka) return 'Rp0'
+    if (!angka) return 'Rp 0'
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -97,6 +129,7 @@ export default function MyOrders() {
             { id: 'pending', label: 'Pending' },
             { id: 'in_progress', label: 'In Progress' },
             { id: 'completed', label: 'Completed' },
+            { id: 'cancelled', label: 'Cancelled' }, 
           ].map((tab) => (
             <button
               key={tab.id}
@@ -133,16 +166,15 @@ export default function MyOrders() {
         ) : (
           <div className="space-y-4">
             {filteredOrders.map((order) => (
-              <Link
+              <div
                 key={order.id}
-                to={`/order/${order.id}`}
-                className="glass-card rounded-2xl p-6 hover:border-primary/50 transition-all block fade-in"
+                className="glass-card rounded-2xl p-6 hover:border-primary/50 transition-all fade-in"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-lg font-bold text-white">
-                        {order.services?.name}
+                        {order.services?.name || 'Unknown Service'}
                       </h3>
                       <span className={`px-2.5 py-0.5 rounded-md text-xs font-semibold uppercase border ${getStatusStyle(order.status)}`}>
                         {(order.status || 'pending').replace('_', ' ')}
@@ -153,28 +185,42 @@ export default function MyOrders() {
                       <span>•</span>
                       <span>{formatDate(order.created_at)}</span>
                       <span>•</span>
-                      <span className="text-primary-light font-semibold">{order.current_percentage}% complete</span>
+                      <span className="text-primary-light font-semibold">{order.current_percentage || 0}% complete</span>
                     </div>
 
                     {/* Mini Progress Bar */}
                     <div className="mt-3 w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
                       <div 
                         className="h-1.5 rounded-full bg-gradient-to-r from-primary to-purple-500 transition-all"
-                        style={{ width: `${order.current_percentage}%` }}
+                        style={{ width: `${order.current_percentage || 0}%` }}
                       ></div>
                     </div>
                   </div>
 
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-2">
                     <p className="text-xl font-bold gradient-text">
                       {formatRupiah(order.total_price)}
                     </p>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      View details →
-                    </p>
+                    <div className="flex items-center gap-3">
+                      {(order.status === 'pending' || order.status === 'paid') && (
+                        <button
+                          onClick={() => handleCancelOrder(order.id, order.status || 'pending')}
+                          className="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-1 rounded hover:bg-red-500/10 transition"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      
+                      <Link
+                        to={`/order/${order.id}`}
+                        className="text-xs text-zinc-400 hover:text-primary transition flex items-center gap-1"
+                      >
+                        View details →
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
