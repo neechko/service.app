@@ -43,7 +43,7 @@ export default function AdminDashboard() {
   const [workers, setWorkers] = useState<Profile[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [users, setUsers] = useState<Profile[]>([]); // ✅ State untuk Users
+  const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [assigningOrder, setAssigningOrder] = useState<Order | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<string>("");
@@ -68,7 +68,6 @@ export default function AdminDashboard() {
     is_active: true,
   });
 
-  // ✅ Hanya ada 1 deklarasi tabs
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "orders", label: "Orders" },
@@ -109,8 +108,6 @@ export default function AdminDashboard() {
   async function handleDeleteUser(userId: string, userName: string) {
     if (!confirm(`Are you sure you want to delete user "${userName}"? This will remove their profile data.`)) return;
     
-    // ✅ AMAN UNTUK FRONTEND: Hanya menghapus data profil. 
-    // (Menghapus dari auth.users memerlukan Service Role Key yang TIDAK BOLEH ada di frontend)
     const { error } = await supabase.from("profiles").delete().eq("id", userId);
     
     if (error) alert("Failed to delete user: " + error.message);
@@ -374,11 +371,21 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
+                  {/* ✅ DIPERBAIKI: Tombol Assign/Reassign selalu muncul */}
                   <div className="flex gap-2">
-                    <button onClick={() => navigate("/order/" + order.id)} className="flex-1 btn-secondary text-sm">View Details</button>
-                    {!order.worker_id && (
-                      <button onClick={() => setAssigningOrder(order)} className="flex-1 bg-primary hover:bg-primary-hover text-white font-semibold py-2 rounded-lg text-sm transition-all">Assign Worker</button>
-                    )}
+                    <button onClick={() => navigate("/order/" + order.id)} className="flex-1 btn-secondary text-sm">
+                      View Details
+                    </button>
+                    <button
+                      onClick={() => setAssigningOrder(order)}
+                      className={`flex-1 text-white font-semibold py-2 rounded-lg text-sm transition-all ${
+                        order.worker_id
+                          ? 'bg-orange-500 hover:bg-orange-600'
+                          : 'bg-primary hover:bg-primary-hover'
+                      }`}
+                    >
+                      {order.worker_id ? 'Reassign Worker' : 'Assign Worker'}
+                    </button>
                   </div>
                 </div>
               ))
@@ -386,7 +393,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ✅ Users Tab (BARU DITAMBAHKAN) */}
+        {/* Users Tab */}
         {activeTab === "users" && (
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -547,7 +554,9 @@ export default function AdminDashboard() {
         {assigningOrder && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-md">
-              <h2 className="text-xl font-bold text-white mb-2">Assign Worker</h2>
+              <h2 className="text-xl font-bold text-white mb-2">
+                {assigningOrder.worker_id ? 'Reassign Worker' : 'Assign Worker'}
+              </h2>
               <p className="text-zinc-400 text-sm mb-6">{assigningOrder.services?.name || "Unknown Service"}</p>
               {workers.length === 0 ? (
                 <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-4 py-3 rounded-lg text-sm mb-4">No workers registered yet.</div>
@@ -562,7 +571,9 @@ export default function AdminDashboard() {
                   </select>
                   <div className="flex gap-3">
                     <button onClick={() => { setAssigningOrder(null); setSelectedWorker(""); }} className="flex-1 btn-secondary">Cancel</button>
-                    <button onClick={handleAssignWorker} disabled={!selectedWorker} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold py-2.5 rounded-lg transition-all">Assign</button>
+                    <button onClick={handleAssignWorker} disabled={!selectedWorker} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-semibold py-2.5 rounded-lg transition-all">
+                      {assigningOrder.worker_id ? 'Reassign' : 'Assign'}
+                    </button>
                   </div>
                 </>
               )}

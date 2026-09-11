@@ -22,18 +22,27 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
   const [newMessage, setNewMessage] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
   const [sending, setSending] = useState<boolean>(false)
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null) 
 
   useEffect(() => {
     fetchMessages()
-    
-    // Polling setiap 3 detik untuk pesan baru (bisa upgrade ke Supabase Realtime nanti)
     const interval = setInterval(fetchMessages, 3000)
     return () => clearInterval(interval)
   }, [order.id])
 
+
   useEffect(() => {
-    scrollToBottom()
+    const container = chatContainerRef.current
+    if (container) {
+      // Cek apakah user sudah di posisi paling bawah (toleransi 50px)
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50
+      
+      if (isAtBottom) {
+        scrollToBottom()
+      }
+    }
   }, [messages])
 
   function scrollToBottom() {
@@ -71,12 +80,14 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
     } else {
       setNewMessage('')
       await fetchMessages()
+      // Paksa scroll ke bawah saat kita sendiri yang mengirim pesan
+      setTimeout(scrollToBottom, 100) 
     }
     setSending(false)
   }
 
   const formatTime = (dateString: string | null | undefined) => {
-    if (!dateString) return 'N/A'
+    if (!dateString) return ''
     return new Date(dateString).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
@@ -92,8 +103,10 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
         Order Chat
       </h3>
 
-      {/* Chat Messages Area */}
-      <div className="h-80 overflow-y-auto bg-zinc-900/50 rounded-lg p-4 mb-4 space-y-3">
+      <div 
+        ref={chatContainerRef}
+        className="h-80 overflow-y-auto bg-zinc-900/50 rounded-lg p-4 mb-4 space-y-3"
+      >
         {loading ? (
           <div className="flex justify-center items-center h-full">
             <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
