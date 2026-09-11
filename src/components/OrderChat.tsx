@@ -24,7 +24,8 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
   const [sending, setSending] = useState<boolean>(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const chatContainerRef = useRef<HTMLDivElement>(null) 
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  const prevMessagesLength = useRef(0) 
 
   useEffect(() => {
     fetchMessages()
@@ -34,20 +35,23 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
 
 
   useEffect(() => {
-    const container = chatContainerRef.current
-    if (container) {
-      // Cek apakah user sudah di posisi paling bawah (toleransi 50px)
-      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50
-      
-      if (isAtBottom) {
-        scrollToBottom()
+    // Hanya jalankan jika jumlah pesan berubah (ada pesan baru masuk)
+    if (messages.length !== prevMessagesLength.current) {
+      prevMessagesLength.current = messages.length
+
+      const container = chatContainerRef.current
+      if (container) {
+        // Cek apakah user sedang berada di dekat bagian bawah (toleransi 100px)
+        const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100
+        
+        // Jika user di bawah, scroll ke paling bawah. Jika tidak, biarkan user membaca.
+        if (isAtBottom) {
+          // Gunakan 'auto' (bukan 'smooth') agar lompatan instan dan tidak pusing
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+        }
       }
     }
   }, [messages])
-
-  function scrollToBottom() {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
 
   async function fetchMessages() {
     const { data } = await supabase
@@ -80,8 +84,7 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
     } else {
       setNewMessage('')
       await fetchMessages()
-      // Paksa scroll ke bawah saat kita sendiri yang mengirim pesan
-      setTimeout(scrollToBottom, 100) 
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
     }
     setSending(false)
   }
@@ -103,6 +106,7 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
         Order Chat
       </h3>
 
+      {/* Area Chat dengan Ref */}
       <div 
         ref={chatContainerRef}
         className="h-80 overflow-y-auto bg-zinc-900/50 rounded-lg p-4 mb-4 space-y-3"
@@ -177,7 +181,7 @@ export default function OrderChat({ order, currentUserId, userRole }: OrderChatP
       </form>
 
       <p className="text-xs text-zinc-500 mt-2 text-center">
-        💡 Share credentials securely here. Messages are only visible to order participants.
+        * Share credentials securely here. Messages are only visible to order participants.
       </p>
     </div>
   )
