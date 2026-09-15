@@ -42,7 +42,7 @@ src/
 
 ---
 
-## 🗄️ DATABASE & SUPABASE RULES
+## DATABASE & SUPABASE RULES
 
 1. **Row Level Security (RLS)**: Assume RLS is strictly enforced. If a query fails silently or returns empty, check if the user has the correct role (`consumer`, `worker`, `admin`) and if the RLS policy allows the action.
 2. **Automated Triggers**: Do not manually calculate or update these fields in frontend code; the database handles them via triggers:

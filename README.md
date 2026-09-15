@@ -1,7 +1,7 @@
 
 ---
 
-# Service.app (Primora)
+# Service.app
 
 **Service.app** is a enterprise-grade web platform designed to seamlessly connect game players (Consumers) with professional boosters (Workers) for game boosting services (starting with Genshin Impact, with scalability for other titles). 
 
