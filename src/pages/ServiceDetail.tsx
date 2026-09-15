@@ -94,8 +94,11 @@ export default function ServiceDetail() {
     );
   };
 
+  // ✅ FIX: Logika Harga yang benar (Base price jika kosong, sum jika ada package)
   const calculatePrice = () => {
     if (!service) return 0;
+    if (selectedTierIds.length === 0) return service.base_price;
+    
     return selectedTierIds.reduce((total, tierId) => {
       const tier = tiers.find((t) => t.id === tierId);
       if (!tier) return total;
@@ -103,11 +106,17 @@ export default function ServiceDetail() {
     }, 0);
   };
 
+  // ✅ FIX: Logika Jam yang benar (Sum dari semua package terpilih)
   const calculateTotalHours = () => {
+    if (selectedTierIds.length === 0) {
+      return service?.estimated_hours || 1;
+    }
+    
     return selectedTierIds.reduce((total, tierId) => {
       const tier = tiers.find((t) => t.id === tierId);
-      if (!tier) return total;
-      return total + (tier.estimated_hours || service?.estimated_hours || 1);
+      // Gunakan jam package jika ada, jika tidak gunakan jam dasar service
+      const hours = tier?.estimated_hours ?? service?.estimated_hours ?? 1;
+      return total + hours;
     }, 0);
   };
 
@@ -127,18 +136,15 @@ export default function ServiceDetail() {
       return;
     }
 
-    // ✅ FIX: Cegah Worker/Admin memesan
     if (userRole !== 'consumer') {
       await showAlert({ 
         title: 'Access Restricted', 
-        message: 'Ordering services is only available for Consumer accounts. Please use a consumer account to place an order.', 
+        message: 'Ordering services is only available for Consumer accounts.', 
         type: 'warning' 
       });
       return;
     }
 
-    // ✅ FIX: Logika Package
-    // Jika ada tiers, user WAJIB pilih minimal satu. Jika tidak ada tiers, lewati cek ini (anggap base price).
     if (tiers.length > 0 && selectedTierIds.length === 0) {
       await showAlert({ title: 'No Package Selected', message: 'Please select at least one package.', type: 'warning' });
       return;
@@ -149,26 +155,13 @@ export default function ServiceDetail() {
       return;
     }
 
-    // Tentukan data yang akan masuk ke cart
-    let finalPrice = service!.base_price;
-    let finalTierNames: string[] = ['Standard Service'];
-    let finalTierIds: string[] = [];
-    let finalHours = service?.estimated_hours || 1;
-
-    if (tiers.length > 0) {
-      finalPrice = calculatePrice();
-      finalTierNames = getSelectedTierNames();
-      finalTierIds = selectedTierIds;
-      finalHours = calculateTotalHours();
-    }
-
     addToCart({
       serviceId: service!.id,
       serviceName: service!.name,
-      tierIds: finalTierIds,
-      tierNames: finalTierNames,
-      price: finalPrice,
-      estimatedHours: finalHours,
+      tierIds: selectedTierIds.length > 0 ? selectedTierIds : [],
+      tierNames: selectedTierIds.length > 0 ? getSelectedTierNames() : ['Standard Service'],
+      price: calculatePrice(),
+      estimatedHours: calculateTotalHours(),
       gameUid: gameUid.trim(),
       gameServer: gameServer.trim(),
       notes: notes.trim()
@@ -207,7 +200,6 @@ export default function ServiceDetail() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            {/* Header */}
             <div className="glass-card rounded-2xl p-6">
               <h1 className="text-3xl font-bold text-white mb-2">{service.name}</h1>
 
@@ -231,7 +223,6 @@ export default function ServiceDetail() {
 
               <p className="text-zinc-400 mb-6 leading-relaxed">{service.description || 'No description provided.'}</p>
 
-              {/* ✅ Logic Tampilan Package */}
               {tiers.length > 0 ? (
                 <div>
                   <h3 className="text-lg font-bold text-white mb-2">Available Packages</h3>
@@ -304,14 +295,12 @@ export default function ServiceDetail() {
             </div>
           </div>
 
-          {/* Right Column: Order Summary */}
           <div className="lg:col-span-1">
             {checkingAuth ? (
               <div className="glass-card rounded-2xl p-6 sticky top-24 flex justify-center">
                 <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
               </div>
             ) : userRole && userRole !== 'consumer' ? (
-              // ✅ Tampilan jika Worker/Admin login
               <div className="glass-card rounded-2xl p-6 sticky top-24 text-center border border-red-500/30 bg-red-500/5">
                 <svg className="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -319,11 +308,9 @@ export default function ServiceDetail() {
                 <h3 className="text-lg font-bold text-white mb-2">Ordering Restricted</h3>
                 <p className="text-sm text-zinc-400">
                   Ordering services is only available for <strong className="text-white">Consumer</strong> accounts. 
-                  Please switch to a consumer account to place an order.
                 </p>
               </div>
             ) : (
-              // ✅ Tampilan Normal untuk Consumer
               <div className="glass-card rounded-2xl p-6 sticky top-24">
                 <h3 className="text-xl font-bold text-white mb-4">Order Summary</h3>
 
@@ -340,11 +327,11 @@ export default function ServiceDetail() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-zinc-400">Est. Time:</span>
-                    <span className="text-white font-medium">{tiers.length > 0 ? calculateTotalHours() : (service.estimated_hours || 1)} Hours</span>
+                    <span className="text-white font-medium">{calculateTotalHours()} Hours</span>
                   </div>
                   <div className="border-t border-border my-2 pt-2 flex justify-between items-center">
                     <span className="text-zinc-300 font-medium">Total Price:</span>
-                    <span className="text-2xl font-bold text-primary">{formatRupiah(tiers.length > 0 ? calculatePrice() : service.base_price)}</span>
+                    <span className="text-2xl font-bold text-primary">{formatRupiah(calculatePrice())}</span>
                   </div>
                 </div>
 
