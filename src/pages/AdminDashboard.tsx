@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent, ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database";
-import { showConfirm, showAlert } from "../lib/dialog"; // ✅ TAMBAHKAN INI
+import { showConfirm, showAlert } from "../lib/dialog";
 
 // Tipe dasar dari database
 type Service = Database["public"]["Tables"]["services"]["Row"];
@@ -484,7 +484,14 @@ export default function AdminDashboard() {
                   </div>
                   <h3 className="text-lg font-bold text-white">{worker.full_name}</h3>
                   <p className="text-zinc-400 text-sm">{worker.phone || "-"}</p>
-                  <p className="text-xs text-zinc-500 mt-2">Joined {formatDate(worker.created_at)}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-xs text-zinc-500">Joined {formatDate(worker.created_at)}</span>
+                    {worker.seniority_level && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary-light uppercase">
+                        {worker.seniority_level}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))
             )}
@@ -559,7 +566,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Assign Modal */}
+
         {assigningOrder && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-md">
@@ -571,12 +578,43 @@ export default function AdminDashboard() {
                 <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-4 py-3 rounded-lg text-sm mb-4">No workers registered yet.</div>
               ) : (
                 <>
-                  <label className="block text-sm font-medium text-zinc-300 mb-2">Select Worker</label>
-                  <select value={selectedWorker} onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedWorker(e.target.value)} className="input-modern mb-4">
-                    <option value="">-- Select --</option>
-                    {workers.map((worker) => (
-                      <option key={worker.id} value={worker.id}>{worker.full_name} ({worker.phone || "No phone"})</option>
-                    ))}
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">Select Worker (Sorted by Priority)</label>
+                  <select 
+                    value={selectedWorker} 
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedWorker(e.target.value)} 
+                    className="input-modern mb-4"
+                  >
+                    <option value="">-- Select Worker --</option>
+
+                    {[...workers].sort((a, b) => {
+                      // 1. Prioritaskan yang available dan tidak cuti
+                      if (a.is_available !== b.is_available) return a.is_available ? -1 : 1;
+                      if (a.is_on_leave !== b.is_on_leave) return a.is_on_leave ? 1 : -1;
+                      
+                      // 2. Prioritaskan beban kerja paling ringan (rasio order aktif vs kapasitas)
+                      const aLoad = (a.current_active_orders || 0) / (a.max_capacity || 3);
+                      const bLoad = (b.current_active_orders || 0) / (b.max_capacity || 3);
+                      if (aLoad !== bLoad) return aLoad - bLoad;
+
+                      // 3. Prioritaskan senioritas (Senior: 3, Mid: 2, Junior: 1)
+                      const weight: Record<string, number> = { senior: 3, mid: 2, junior: 1 };
+                      const aWeight = weight[a.seniority_level || 'junior'] || 1;
+                      const bWeight = weight[b.seniority_level || 'junior'] || 1;
+                      return bWeight - aWeight;
+                    }).map((worker) => {
+                      const load = worker.current_active_orders || 0;
+                      const cap = worker.max_capacity || 3;
+                      const isFull = load >= cap;
+                      
+                      return (
+                        <option key={worker.id} value={worker.id} disabled={isFull && !assigningOrder.worker_id}>
+                          {worker.full_name} 
+                          {worker.seniority_level && ` [${worker.seniority_level.toUpperCase()}]`} 
+                          {' - '}
+                          Load: {load}/{cap} {worker.is_on_leave ? '(ON LEAVE)' : ''}
+                        </option>
+                      )
+                    })}
                   </select>
                   <div className="flex gap-3">
                     <button onClick={() => { setAssigningOrder(null); setSelectedWorker(""); }} className="flex-1 btn-secondary">Cancel</button>

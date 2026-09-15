@@ -13,6 +13,7 @@ import MyOrders from './pages/MyOrders'
 import WorkerDashboard from './pages/WorkerDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
+import HowToOrder from './pages/HowToOrder'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
@@ -188,6 +189,7 @@ function App() {
         {/* Public Routes (Bisa diakses siapa saja) */}
         <Route path="/" element={<Catalog />} />
         <Route path="/service/:id" element={<ServiceDetail />} />
+        <Route path="/how-to-order" element={<HowToOrder />} />
         
         {/* Protected Routes (Wajib Login) */}
         <Route path="/order/:id" element={user ? <OrderTracking /> : <Navigate to="/login" />} />

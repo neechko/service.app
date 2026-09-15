@@ -3,7 +3,7 @@ import ConfirmModal, { ConfirmOptions } from '../components/ConfirmModal'
 import { useState, useEffect } from 'react'
 
 // ============================================================
-// SHOW CONFIRM - Menggantikan window.confirm()
+// SHOW CONFIRM
 // ============================================================
 export function showConfirm(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
@@ -29,7 +29,7 @@ export function showConfirm(options: ConfirmOptions): Promise<boolean> {
 }
 
 // ============================================================
-// SHOW ALERT - Menggantikan window.alert()
+// SHOW ALERT
 // ============================================================
 export function showAlert(options: {
   title: string
@@ -63,7 +63,7 @@ export function showAlert(options: {
 }
 
 // ============================================================
-// SHOW PROMPT - Menggantikan window.prompt()
+// SHOW PROMPT
 // ============================================================
 interface PromptOptions {
   title: string
@@ -110,7 +110,9 @@ function PromptModal({ isOpen, options, onSubmit, onCancel }: PromptModalProps) 
       >
         <div className="flex flex-col items-center text-center mb-4">
           <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-3">
-            <span className="text-2xl">💬</span>
+            <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
           </div>
           <h3 className="text-xl font-bold text-white mb-1">{options.title}</h3>
           <p className="text-zinc-400 text-sm">{options.message}</p>
