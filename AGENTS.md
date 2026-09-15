@@ -20,7 +20,7 @@ This document provides strict rules, context, and architectural guidelines for A
 
 ---
 
-## 🏗️ ARCHITECTURE & TECH STACK
+## ARCHITECTURE & TECH STACK
 
 - **Frontend**: React 18, TypeScript, Vite
 - **Styling**: Tailwind CSS (Dark theme, glassmorphism utilities like `glass-card`, `input-modern`, `btn-primary`)
