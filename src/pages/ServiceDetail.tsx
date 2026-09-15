@@ -60,7 +60,7 @@ export default function ServiceDetail() {
         .select('*')
         .eq('service_id', id)
         .eq('is_active', true)
-        .order('price_modifier', { ascending: true });
+        .order('fixed_price', { ascending: true });
 
       setTiers(tiersData || []);
 
@@ -94,19 +94,23 @@ export default function ServiceDetail() {
     );
   };
 
-  // ✅ FIX: Logika Harga yang benar (Base price jika kosong, sum jika ada package)
+  // ✅ PERBAIKAN: Hitung harga dari fixed_price package, bukan base_price * modifier
   const calculatePrice = () => {
     if (!service) return 0;
-    if (selectedTierIds.length === 0) return service.base_price;
     
-    return selectedTierIds.reduce((total, tierId) => {
-      const tier = tiers.find((t) => t.id === tierId);
-      if (!tier) return total;
-      return total + Math.round(service.base_price * (tier.price_modifier || 1));
-    }, 0);
+    // Jika ada package yang dipilih, jumlahkan fixed_price dari semua package
+    if (selectedTierIds.length > 0) {
+      return selectedTierIds.reduce((total, tierId) => {
+        const tier = tiers.find((t) => t.id === tierId);
+        if (!tier) return total;
+        return total + (tier.fixed_price || 0);
+      }, 0);
+    }
+    
+    // Jika tidak ada package yang dipilih, gunakan base_price service
+    return service.base_price;
   };
 
-  // ✅ FIX: Logika Jam yang benar (Sum dari semua package terpilih)
   const calculateTotalHours = () => {
     if (selectedTierIds.length === 0) {
       return service?.estimated_hours || 1;
@@ -114,7 +118,6 @@ export default function ServiceDetail() {
     
     return selectedTierIds.reduce((total, tierId) => {
       const tier = tiers.find((t) => t.id === tierId);
-      // Gunakan jam package jika ada, jika tidak gunakan jam dasar service
       const hours = tier?.estimated_hours ?? service?.estimated_hours ?? 1;
       return total + hours;
     }, 0);
@@ -230,7 +233,6 @@ export default function ServiceDetail() {
                   <div className="space-y-3">
                     {tiers.map((tier) => {
                       const isSelected = selectedTierIds.includes(tier.id);
-                      const tierPrice = Math.round(service.base_price * (tier.price_modifier || 1));
 
                       return (
                         <div key={tier.id} onClick={() => handleToggleTier(tier.id)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex justify-between items-center ${isSelected ? 'border-primary bg-primary/10' : 'border-border bg-surface hover:border-zinc-600'}`}>
@@ -244,7 +246,7 @@ export default function ServiceDetail() {
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-primary">{formatRupiah(tierPrice)}</p>
+                            <p className="font-bold text-primary">{formatRupiah(tier.fixed_price || 0)}</p>
                           </div>
                         </div>
                       );
