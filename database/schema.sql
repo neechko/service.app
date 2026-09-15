@@ -1,5 +1,5 @@
 -- ============================================================
--- PRIMORA - DATABASE SCHEMA (UPDATED v2.0)
+-- PRIMORA - DATABASE SCHEMA (UPDATED v2.1)
 -- Game Boosting Service Platform
 -- Last Updated: September 2026
 -- ============================================================
@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 2. TABLES DEFINITION
 -- ============================================================
 
--- Tabel Profiles (Ditambahkan kolom metrik worker & rating)
+-- Tabel Profiles (Metrik worker & rating)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   phone TEXT,
   email TEXT,
   avatar_url TEXT,
-  -- ✅ Kolom Baru untuk Worker Management
+  -- Kolom untuk Worker Management
   seniority_level TEXT DEFAULT 'junior' CHECK (seniority_level IN ('junior', 'mid', 'senior')),
   max_capacity INTEGER DEFAULT 3,
   current_active_orders INTEGER DEFAULT 0,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS public.services (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ✅ Tabel Service Tiers / Packages (Baru)
+-- ✅ Tabel Service Tiers / Packages
 CREATE TABLE IF NOT EXISTS public.service_tiers (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   service_id UUID REFERENCES public.services(id) ON DELETE CASCADE,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS public.service_tiers (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabel Orders (Ditambahkan kolom timeline otomatis)
+-- Tabel Orders (Dengan kolom total_estimated_hours)
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   consumer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
@@ -81,9 +81,11 @@ CREATE TABLE IF NOT EXISTS public.orders (
   cancel_reason TEXT,
   cancelled_at TIMESTAMP WITH TIME ZONE,
   completed_at TIMESTAMP WITH TIME ZONE,
-  -- ✅ Kolom Baru untuk Automated Deadline Tracker
+  -- Kolom untuk Automated Deadline Tracker
   assigned_at TIMESTAMP WITH TIME ZONE,
   expected_completion_at TIMESTAMP WITH TIME ZONE,
+  -- ✅ Kolom Baru: Total jam dari package yang dipilih customer
+  total_estimated_hours INTEGER DEFAULT 1,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -107,7 +109,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ✅ Tabel Reviews / Ulasan (Baru)
+-- ✅ Tabel Reviews / Ulasan
 CREATE TABLE IF NOT EXISTS public.reviews (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE UNIQUE, -- 1 order = 1 review
@@ -135,6 +137,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender ON public.messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created ON public.messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_service ON public.reviews(service_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_reviewee ON public.reviews(reviewee_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_order ON public.reviews(order_id);
 
 -- ============================================================
 -- 4. TRIGGERS
@@ -196,6 +199,7 @@ AFTER INSERT OR UPDATE ON public.orders
 FOR EACH ROW EXECUTE FUNCTION sync_worker_active_orders();
 
 -- C. ✅ Otomatis Hitung Deadline Order saat Worker Di-assign
+--    Menggunakan total_estimated_hours dari order (bukan hanya dari service)
 CREATE OR REPLACE FUNCTION set_order_deadline()
 RETURNS TRIGGER AS $$
 DECLARE est_hours INTEGER;
@@ -203,9 +207,11 @@ BEGIN
   IF (TG_OP = 'UPDATE' AND OLD.worker_id IS DISTINCT FROM NEW.worker_id AND NEW.worker_id IS NOT NULL) 
      OR (TG_OP = 'UPDATE' AND NEW.worker_id IS NOT NULL AND NEW.status IN ('paid', 'in_progress') AND OLD.assigned_at IS NULL) THEN
     
-    SELECT estimated_hours INTO est_hours FROM public.services WHERE id = NEW.service_id;
+    -- PRIORITAS: Gunakan total_estimated_hours dari order. Jika kosong, ambil dari service.
+    est_hours := COALESCE(NEW.total_estimated_hours, (SELECT estimated_hours FROM public.services WHERE id = NEW.service_id), 1);
+    
     NEW.assigned_at = NOW();
-    NEW.expected_completion_at = NOW() + (COALESCE(est_hours, 1) || ' hours')::INTERVAL;
+    NEW.expected_completion_at = NOW() + (est_hours || ' hours')::INTERVAL;
   END IF;
   
   IF TG_OP = 'UPDATE' AND NEW.status IN ('completed', 'cancelled') THEN
@@ -236,30 +242,44 @@ CREATE TRIGGER trigger_update_worker_rating
 AFTER INSERT ON public.reviews
 FOR EACH ROW EXECUTE FUNCTION update_worker_rating();
 
+-- E. ✅ Otomatis isi service_id di reviews berdasarkan order_id
+CREATE OR REPLACE FUNCTION set_review_service_id()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.service_id IS NULL AND NEW.order_id IS NOT NULL THEN
+    SELECT service_id INTO NEW.service_id FROM public.orders WHERE id = NEW.order_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trigger_set_review_service_id ON public.reviews;
+CREATE TRIGGER trigger_set_review_service_id
+BEFORE INSERT ON public.reviews
+FOR EACH ROW EXECUTE FUNCTION set_review_service_id();
+
 -- ============================================================
 -- 5. ROW LEVEL SECURITY (RLS) - ENABLE
 -- ============================================================
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.service_tiers ENABLE ROW LEVEL SECURITY; -- ✅ Baru
+ALTER TABLE public.service_tiers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.progress_updates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY; -- ✅ Baru
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- 6. RLS POLICIES - PROFILES
 -- ============================================================
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Admins and users can update profiles" ON public.profiles;
 
 CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
 CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
--- ✅ DIPERBAIKI: User bisa edit diri sendiri, ATAU Admin bisa edit user mana pun
+-- User bisa edit diri sendiri, ATAU Admin bisa edit user mana pun
 CREATE POLICY "Admins and users can update profiles" ON public.profiles FOR UPDATE
 USING (
   auth.uid() = id OR 
@@ -281,6 +301,8 @@ CREATE POLICY "Services are viewable by everyone" ON public.services FOR SELECT 
 -- ============================================================
 -- 8. RLS POLICIES - SERVICE TIERS (Packages)
 -- ============================================================
+DROP POLICY IF EXISTS "Service tiers viewable by everyone" ON public.service_tiers;
+DROP POLICY IF EXISTS "Admins can manage service tiers" ON public.service_tiers;
 CREATE POLICY "Service tiers viewable by everyone" ON public.service_tiers FOR SELECT USING (true);
 CREATE POLICY "Admins can manage service tiers" ON public.service_tiers FOR ALL USING (
   (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
@@ -311,24 +333,26 @@ CREATE POLICY "Workers and admins can update active orders" ON public.orders FOR
 DROP POLICY IF EXISTS "Progress viewable by participants" ON public.progress_updates;
 DROP POLICY IF EXISTS "Workers and admins can insert progress" ON public.progress_updates;
 CREATE POLICY "Progress viewable by participants" ON public.progress_updates FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = order_id AND (orders.consumer_id = auth.uid() OR orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
+  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = progress_updates.order_id AND (orders.consumer_id = auth.uid() OR orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
 );
 CREATE POLICY "Workers and admins can insert progress" ON public.progress_updates FOR INSERT WITH CHECK (
-  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = order_id AND (orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
+  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = progress_updates.order_id AND (orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
 );
 
 DROP POLICY IF EXISTS "Messages viewable by participants" ON public.messages;
 DROP POLICY IF EXISTS "Participants can insert messages" ON public.messages;
 CREATE POLICY "Messages viewable by participants" ON public.messages FOR SELECT USING (
-  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = order_id AND (orders.consumer_id = auth.uid() OR orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
+  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = messages.order_id AND (orders.consumer_id = auth.uid() OR orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
 );
 CREATE POLICY "Participants can insert messages" ON public.messages FOR INSERT WITH CHECK (
-  auth.uid() = sender_id AND EXISTS (SELECT 1 FROM public.orders WHERE orders.id = order_id AND (orders.consumer_id = auth.uid() OR orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
+  auth.uid() = sender_id AND EXISTS (SELECT 1 FROM public.orders WHERE orders.id = messages.order_id AND (orders.consumer_id = auth.uid() OR orders.worker_id = auth.uid() OR (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'))
 );
 
 -- ============================================================
 -- 11. RLS POLICIES - REVIEWS (Ulasan)
 -- ============================================================
+DROP POLICY IF EXISTS "Reviews are viewable by everyone" ON public.reviews;
+DROP POLICY IF EXISTS "Consumers can insert own review" ON public.reviews;
 CREATE POLICY "Reviews are viewable by everyone" ON public.reviews FOR SELECT USING (true);
 CREATE POLICY "Consumers can insert own review" ON public.reviews FOR INSERT WITH CHECK (
   auth.uid() = reviewer_id AND (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'consumer'
@@ -341,6 +365,8 @@ CREATE POLICY "Consumers can insert own review" ON public.reviews FOR INSERT WIT
 
 DROP POLICY IF EXISTS "Screenshots are publicly accessible" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can upload screenshots" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own screenshots" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own screenshots" ON storage.objects;
 CREATE POLICY "Screenshots are publicly accessible" ON storage.objects FOR SELECT USING (bucket_id = 'screenshots');
 CREATE POLICY "Authenticated users can upload screenshots" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'screenshots' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update their own screenshots" ON storage.objects FOR UPDATE USING (bucket_id = 'screenshots' AND auth.role() = 'authenticated');
@@ -348,6 +374,8 @@ CREATE POLICY "Users can delete their own screenshots" ON storage.objects FOR DE
 
 DROP POLICY IF EXISTS "Avatars are publicly accessible" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can upload avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own avatars" ON storage.objects;
 CREATE POLICY "Avatars are publicly accessible" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
 CREATE POLICY "Authenticated users can upload avatars" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update their own avatars" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.role() = 'authenticated');
