@@ -1,23 +1,29 @@
-import { useEffect, useState, FormEvent, ChangeEvent } from 'react'
+import { useEffect, useState, FormEvent } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Database } from '../types/database'
 import { showAlert } from '../lib/dialog'
+import { useCart } from '../context/CartContext' // ✅ Import Context Keranjang
 
 type Service = Database['public']['Tables']['services']['Row']
 type ServiceTier = Database['public']['Tables']['service_tiers']['Row']
+type Review = Database['public']['Tables']['reviews']['Row'] & {
+  consumer_profile?: { full_name: string | null } | null
+}
 
 export default function ServiceDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { addToCart } = useCart() // ✅ Gunakan fungsi addToCart
   
   const [service, setService] = useState<Service | null>(null)
   const [tiers, setTiers] = useState<ServiceTier[]>([])
   const [selectedTier, setSelectedTier] = useState<ServiceTier | null>(null)
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [averageRating, setAverageRating] = useState<number>(0)
   const [loading, setLoading] = useState<boolean>(true)
-  const [submitting, setSubmitting] = useState<boolean>(false)
 
-  // Form State
+  // Form State untuk Keranjang
   const [gameUid, setGameUid] = useState<string>('')
   const [gameServer, setGameServer] = useState<string>('')
   const [notes, setNotes] = useState<string>('')
@@ -52,6 +58,22 @@ export default function ServiceDetail() {
         setTiers(tiersData)
         setSelectedTier(tiersData[0]) // Default pilih tier pertama
       }
+
+      // 3. ✅ Ambil ulasan publik untuk service ini
+      const { data: reviewsData } = await supabase
+        .from('reviews')
+        .select('*, consumer_profile:profiles!reviews_reviewer_id_fkey(full_name)')
+        .eq('service_id', id)
+        .order('created_at', { ascending: false })
+        .limit(5) // Tampilkan 5 ulasan terbaru
+      
+      if (reviewsData) {
+        setReviews(reviewsData)
+        if (reviewsData.length > 0) {
+          const avg = reviewsData.reduce((sum, r) => sum + (r.rating || 0), 0) / reviewsData.length
+          setAverageRating(avg)
+        }
+      }
     }
     setLoading(false)
   }
@@ -70,12 +92,13 @@ export default function ServiceDetail() {
     return service?.estimated_hours || 1
   }
 
-  async function handleCreateOrder(e: FormEvent<HTMLFormElement>) {
+  // ✅ Fungsi Tambah ke Keranjang (Bukan langsung create order)
+  async function handleAddToCart(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      await showAlert({ title: 'Login Required', message: 'Silakan login terlebih dahulu untuk memesan.', type: 'warning' })
+      await showAlert({ title: 'Login Required', message: 'Silakan login terlebih dahulu untuk menambahkan ke keranjang.', type: 'warning' })
       navigate('/login')
       return
     }
@@ -85,30 +108,27 @@ export default function ServiceDetail() {
       return
     }
 
-    setSubmitting(true)
-    try {
-      const finalPrice = calculatePrice()
-      const tierName = selectedTier ? selectedTier.name : 'Standard'
+    const tierName = selectedTier ? selectedTier.name : 'Standard'
+    
+    // Masukkan ke context keranjang
+    addToCart({
+      serviceId: service!.id,
+      serviceName: service!.name,
+      tierId: selectedTier?.id || '',
+      tierName: tierName,
+      price: calculatePrice(),
+      estimatedHours: calculateTime(),
+      gameUid: gameUid.trim(),
+      gameServer: gameServer.trim(),
+      notes: notes.trim()
+    })
 
-      const { error } = await supabase.from('orders').insert([{
-        consumer_id: user.id,
-        service_id: service!.id,
-        total_price: finalPrice,
-        game_uid: gameUid.trim(),
-        game_server: gameServer.trim(),
-        notes: `${tierName} Package. Notes: ${notes.trim()}`,
-        status: 'pending',
-        current_percentage: 0
-      }])
-
-      if (error) throw error
-
-      await showAlert({ title: 'Order Berhasil!', message: 'Order Anda telah dibuat. Silakan tunggu konfirmasi dari Admin.', type: 'success' })
-      navigate('/orders')
-    } catch (err) {
-      await showAlert({ title: 'Error', message: 'Gagal membuat order: ' + (err as Error).message, type: 'danger' })
-    }
-    setSubmitting(false)
+    await showAlert({ title: 'Berhasil!', message: `${service!.name} (${tierName}) telah ditambahkan ke keranjang.`, type: 'success' })
+    
+    // Opsional: Reset form agar user bisa menambah layanan lain dengan UID berbeda
+    setGameUid('')
+    setGameServer('')
+    setNotes('')
   }
 
   if (loading || !service) {
@@ -130,11 +150,24 @@ export default function ServiceDetail() {
         </nav>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Service Info & Tiers */}
+          {/* Left Column: Service Info, Tiers & Reviews */}
           <div className="lg:col-span-2 space-y-6">
             <div className="glass-card rounded-2xl p-6">
               <h1 className="text-3xl font-bold text-white mb-2">{service.name}</h1>
-              <p className="text-zinc-400 mb-6">{service.description || 'Tidak ada deskripsi.'}</p>
+              
+              {/* ✅ Rating Summary */}
+              <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <svg key={star} className={`w-5 h-5 ${star <= Math.round(averageRating) ? 'text-yellow-400' : 'text-zinc-600'}`} fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </div>
+                <span className="text-sm text-zinc-400">({reviews.length} ulasan)</span>
+              </div>
+
+              <p className="text-zinc-400 mb-6 leading-relaxed">{service.description || 'Tidak ada deskripsi.'}</p>
 
               {/* Tier Selection */}
               {tiers.length > 0 ? (
@@ -180,37 +213,67 @@ export default function ServiceDetail() {
               )}
             </div>
 
-            {/* Disclaimer Kecil */}
+            {/* ✅ Public Reviews Section */}
+            <div className="glass-card rounded-2xl p-6">
+              <h3 className="text-lg font-bold text-white mb-4">Ulasan Pelanggan</h3>
+              {reviews.length === 0 ? (
+                <p className="text-zinc-500 text-sm text-center py-4">Belum ada ulasan untuk layanan ini.</p>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="border-b border-border pb-4 last:border-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-white">{review.consumer_profile?.full_name || 'Anonim'}</p>
+                        <div className="flex gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <svg key={star} className={`w-4 h-4 ${star <= (review.rating || 0) ? 'text-yellow-400' : 'text-zinc-600'}`} fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-sm text-zinc-300">{review.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Disclaimer */}
             <div className="p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl">
               <p className="text-xs text-yellow-400/80">
-                 <strong>Catatan:</strong>* Kami tidak bertanggung jawab atas tindakan developer game (banned/reset). Pastikan Anda menyetujui risiko ini sebelum memesan.
+                <strong>Catatan:</strong> Kami tidak bertanggung jawab atas tindakan developer game (banned/reset). Pastikan Anda menyetujui risiko ini sebelum memesan.
               </p>
             </div>
           </div>
 
-          {/* Right Column: Order Form */}
+          {/* Right Column: Cart Summary Form */}
           <div className="lg:col-span-1">
             <div className="glass-card rounded-2xl p-6 sticky top-24">
               <h3 className="text-xl font-bold text-white mb-4">Detail Pemesanan</h3>
               
-              <div className="mb-6 p-4 bg-zinc-900/50 rounded-xl border border-border">
-                <div className="flex justify-between mb-2">
-                  <span className="text-zinc-400 text-sm">Paket:</span>
-                  <span className="text-white text-sm font-medium">{selectedTier?.name || 'Standard'}</span>
+              <div className="mb-6 p-4 bg-zinc-900/50 rounded-xl border border-border space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-zinc-400">Layanan:</span>
+                  <span className="text-white font-medium">{service.name}</span>
                 </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-zinc-400 text-sm">Estimasi:</span>
-                  <span className="text-white text-sm font-medium">{calculateTime()} Jam</span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-zinc-400">Paket:</span>
+                  <span className="text-white font-medium">{selectedTier?.name || 'Standard'}</span>
                 </div>
-                <div className="border-t border-border my-2 pt-2 flex justify-between">
+                <div className="flex justify-between text-sm">
+                  <span className="text-zinc-400">Estimasi:</span>
+                  <span className="text-white font-medium">{calculateTime()} Jam</span>
+                </div>
+                <div className="border-t border-border my-2 pt-2 flex justify-between items-center">
                   <span className="text-zinc-300 font-medium">Total Harga:</span>
-                  <span className="text-xl font-bold text-primary">
+                  <span className="text-2xl font-bold text-primary">
                     {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(calculatePrice())}
                   </span>
                 </div>
               </div>
 
-              <form onSubmit={handleCreateOrder} className="space-y-4">
+              <form onSubmit={handleAddToCart} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-1">Game UID / ID *</label>
                   <input
@@ -248,11 +311,14 @@ export default function ServiceDetail() {
 
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="w-full bg-primary hover:bg-primary-hover disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98]"
+                  className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  {submitting ? 'Memproses...' : 'Buat Order Sekarang'}
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Tambah ke Keranjang
                 </button>
+                <p className="text-xs text-zinc-500 text-center mt-2">Anda dapat meninjau keranjang dan melakukan checkout nanti.</p>
               </form>
             </div>
           </div>

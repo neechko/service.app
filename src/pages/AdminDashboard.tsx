@@ -7,6 +7,10 @@ import { showConfirm, showAlert } from "../lib/dialog";
 type Service = Database["public"]["Tables"]["services"]["Row"];
 type Category = Database["public"]["Tables"]["categories"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+// ✅ Tipe untuk Package/Service Tier
+type Package = Database["public"]["Tables"]["service_tiers"]["Row"] & {
+  services: { name: string } | null;
+};
 
 type Order = Database["public"]["Tables"]["orders"]["Row"] & {
   services: { name: string } | null;
@@ -15,6 +19,7 @@ type Order = Database["public"]["Tables"]["orders"]["Row"] & {
 
 type ServiceForm = { name: string; category: string; description: string; base_price: number; estimated_hours: number; is_active: boolean };
 type CategoryForm = { name: string; slug: string; description: string; is_active: boolean };
+type PackageForm = { service_id: string; name: string; description: string; price_modifier: number; is_active: boolean };
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -24,8 +29,16 @@ export default function AdminDashboard() {
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   
+  // ✅ State untuk Packages
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [showAddPackage, setShowAddPackage] = useState<boolean>(false);
+  const [editingPackage, setEditingPackage] = useState<Package | null>(null);
+  const [packageForm, setPackageForm] = useState<PackageForm>({
+    service_id: "", name: "", description: "", price_modifier: 1.0, is_active: true
+  });
+
+  const [loading, setLoading] = useState<boolean>(true);
   const [assigningOrder, setAssigningOrder] = useState<Order | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<string>("");
 
@@ -37,16 +50,11 @@ export default function AdminDashboard() {
   const [showAddCategory, setShowAddCategory] = useState<boolean>(false);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>({ name: "", slug: "", description: "", is_active: true });
 
-  // ✅ State untuk Edit Worker Stats (Termasuk Load Manual)
   const [showWorkerStatsModal, setShowWorkerStatsModal] = useState<boolean>(false);
   const [editingWorker, setEditingWorker] = useState<Profile | null>(null);
   const [savingWorkerStats, setSavingWorkerStats] = useState<boolean>(false);
   const [workerStatsForm, setWorkerStatsForm] = useState({
-    seniority_level: "junior",
-    max_capacity: 3,
-    current_active_orders: 0,
-    is_available: true,
-    is_on_leave: false
+    seniority_level: "junior", max_capacity: 3, current_active_orders: 0, is_available: true, is_on_leave: false
   });
 
   const tabs = [
@@ -55,6 +63,7 @@ export default function AdminDashboard() {
     { id: "users", label: "Users" },
     { id: "workers", label: "Workers" },
     { id: "services", label: "Services" },
+    { id: "packages", label: "Packages" }, // ✅ Tab Packages
     { id: "categories", label: "Categories" },
   ];
 
@@ -62,12 +71,13 @@ export default function AdminDashboard() {
 
   async function fetchAllData() {
     setLoading(true);
-    const [ordersRes, workersRes, servicesRes, categoriesRes, usersRes] = await Promise.all([
+    const [ordersRes, workersRes, servicesRes, categoriesRes, usersRes, packagesRes] = await Promise.all([
       supabase.from("orders").select("*, services(name), profiles:consumer_id(full_name, phone)").order("created_at", { ascending: false }),
       supabase.from("profiles").select("*").eq("role", "worker"),
       supabase.from("services").select("*").order("created_at", { ascending: false }),
       supabase.from("categories").select("*").order("name"),
-      supabase.from("profiles").select("*").order("created_at", { ascending: false })
+      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      supabase.from("service_tiers").select("*, services(name)").order("created_at", { ascending: false }) // ✅ Ambil packages
     ]);
 
     setOrders((ordersRes.data as Order[]) || []);
@@ -75,6 +85,7 @@ export default function AdminDashboard() {
     setServices(servicesRes.data || []);
     setCategories(categoriesRes.data || []);
     setUsers(usersRes.data || []);
+    setPackages((packagesRes.data as Package[]) || []); // ✅ Set packages
     setLoading(false);
   }
 
@@ -98,30 +109,21 @@ export default function AdminDashboard() {
     if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
     else {
       await showAlert({ title: 'Success', message: "Worker assigned successfully!", type: 'success' });
-      setAssigningOrder(null);
-      setSelectedWorker("");
-      fetchAllData();
+      setAssigningOrder(null); setSelectedWorker(""); fetchAllData();
     }
   }
 
-  // ✅ Fungsi Simpan Worker Stats (Bisa ubah Load manual jika perlu)
   async function handleSaveWorkerStats(e: FormEvent) {
     e.preventDefault();
     if (!editingWorker) return;
     setSavingWorkerStats(true);
     try {
       const { error } = await supabase.from("profiles").update({
-        seniority_level: workerStatsForm.seniority_level,
-        max_capacity: workerStatsForm.max_capacity,
-        current_active_orders: workerStatsForm.current_active_orders,
-        is_available: workerStatsForm.is_available,
-        is_on_leave: workerStatsForm.is_on_leave
+        seniority_level: workerStatsForm.seniority_level, max_capacity: workerStatsForm.max_capacity,
+        current_active_orders: workerStatsForm.current_active_orders, is_available: workerStatsForm.is_available, is_on_leave: workerStatsForm.is_on_leave
       }).eq("id", editingWorker.id);
-      
       if (error) throw error;
-      setShowWorkerStatsModal(false);
-      setEditingWorker(null);
-      fetchAllData();
+      setShowWorkerStatsModal(false); setEditingWorker(null); fetchAllData();
     } catch (err) {
       await showAlert({ title: "Error", message: "Failed to update worker stats.", type: "danger" });
     }
@@ -147,8 +149,7 @@ export default function AdminDashboard() {
   async function handleDeleteService(service: Service) {
     const confirmed = await showConfirm({ title: 'Delete Service', message: `Delete "${service.name}"?`, type: 'danger' });
     if (!confirmed) return;
-    await supabase.from("services").delete().eq("id", service.id);
-    fetchAllData();
+    await supabase.from("services").delete().eq("id", service.id); fetchAllData();
   }
 
   // Categories CRUD
@@ -173,7 +174,40 @@ export default function AdminDashboard() {
     if (data && data.length > 0) { await showAlert({ title: 'Cannot Delete', message: `${data.length} services still use this category.`, type: 'warning' }); return; }
     const confirmed = await showConfirm({ title: 'Delete Category', message: `Delete "${category.name}"?`, type: 'danger' });
     if (!confirmed) return;
-    await supabase.from("categories").delete().eq("id", category.id);
+    await supabase.from("categories").delete().eq("id", category.id); fetchAllData();
+  }
+
+  // ✅ Packages CRUD
+  function openAddPackage() { 
+    setPackageForm({ service_id: "", name: "", description: "", price_modifier: 1.0, is_active: true }); 
+    setEditingPackage(null); 
+    setShowAddPackage(true); 
+  }
+  function openEditPackage(pkg: Package) { 
+    setPackageForm({ service_id: pkg.service_id || "", name: pkg.name, description: pkg.description || "", price_modifier: pkg.price_modifier || 1.0, is_active: pkg.is_active ?? true }); 
+    setEditingPackage(pkg); 
+    setShowAddPackage(true); 
+  }
+  async function handleSavePackage(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (editingPackage) {
+      const { error } = await supabase.from("service_tiers").update(packageForm).eq("id", editingPackage.id);
+      if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
+      else { setShowAddPackage(false); setEditingPackage(null); fetchAllData(); }
+    } else {
+      const { error } = await supabase.from("service_tiers").insert([packageForm]);
+      if (error) await showAlert({ title: 'Error', message: "Failed: " + error.message, type: 'danger' });
+      else { setShowAddPackage(false); fetchAllData(); }
+    }
+  }
+  async function handleTogglePackageActive(pkg: Package) { 
+    await supabase.from("service_tiers").update({ is_active: !pkg.is_active }).eq("id", pkg.id); 
+    fetchAllData(); 
+  }
+  async function handleDeletePackage(pkg: Package) {
+    const confirmed = await showConfirm({ title: 'Delete Package', message: `Delete "${pkg.name}"?`, type: 'danger' });
+    if (!confirmed) return;
+    await supabase.from("service_tiers").delete().eq("id", pkg.id);
     fetchAllData();
   }
 
@@ -279,7 +313,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ✅ Workers Tab (Dengan Tombol Edit Stats yang Berfungsi) */}
+        {/* Workers Tab */}
         {activeTab === "workers" && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {workers.length === 0 ? <div className="col-span-full glass-card rounded-2xl p-12 text-center"><p className="text-zinc-400">No workers registered.</p></div> : workers.map((worker) => {
@@ -289,37 +323,18 @@ export default function AdminDashboard() {
                 <div key={worker.id} className="glass-card rounded-2xl p-6 relative group">
                   <button onClick={() => {
                     setEditingWorker(worker);
-                    setWorkerStatsForm({
-                      seniority_level: worker.seniority_level || "junior",
-                      max_capacity: worker.max_capacity || 3,
-                      current_active_orders: worker.current_active_orders || 0,
-                      is_available: worker.is_available ?? true,
-                      is_on_leave: worker.is_on_leave ?? false
-                    });
+                    setWorkerStatsForm({ seniority_level: worker.seniority_level || "junior", max_capacity: worker.max_capacity || 3, current_active_orders: worker.current_active_orders || 0, is_available: worker.is_available ?? true, is_on_leave: worker.is_on_leave ?? false });
                     setShowWorkerStatsModal(true);
                   }} className="absolute top-4 right-4 p-2 bg-surface hover:bg-surface-hover rounded-lg border border-border transition-all" title="Edit Worker Stats">
                     <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   </button>
-
                   <div className="mb-3">{worker.avatar_url ? <img src={worker.avatar_url} alt={worker.full_name} className="w-12 h-12 rounded-full object-cover border-2 border-primary" /> : <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center"><span className="text-white font-bold text-lg">{worker.full_name?.[0]?.toUpperCase() || "W"}</span></div>}</div>
                   <h3 className="text-lg font-bold text-white">{worker.full_name}</h3>
                   <p className="text-zinc-400 text-sm">{worker.phone || "No phone"}</p>
-                  
                   <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-500">Status:</span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${worker.is_on_leave ? 'bg-red-500/10 text-red-400' : (worker.is_available ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400')}`}>
-                        {worker.is_on_leave ? 'On Leave' : (worker.is_available ? 'Available' : 'Busy')}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-500">Seniority:</span>
-                      <span className="text-white capitalize">{worker.seniority_level || 'Junior'}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-500">Current Load:</span>
-                      <span className="text-primary-light font-bold">{load} / {cap}</span>
-                    </div>
+                    <div className="flex items-center justify-between text-sm"><span className="text-zinc-500">Status:</span><span className={`px-2 py-0.5 rounded text-xs font-medium ${worker.is_on_leave ? 'bg-red-500/10 text-red-400' : (worker.is_available ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400')}`}>{worker.is_on_leave ? 'On Leave' : (worker.is_available ? 'Available' : 'Busy')}</span></div>
+                    <div className="flex items-center justify-between text-sm"><span className="text-zinc-500">Seniority:</span><span className="text-white capitalize">{worker.seniority_level || 'Junior'}</span></div>
+                    <div className="flex items-center justify-between text-sm"><span className="text-zinc-500">Current Load:</span><span className="text-primary-light font-bold">{load} / {cap}</span></div>
                   </div>
                 </div>
               );
@@ -327,7 +342,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Services & Categories Tabs (Disingkat untuk fokus, tetap berfungsi normal) */}
+        {/* Services Tab */}
         {activeTab === "services" && (
           <div className="space-y-4">
             <div className="flex justify-end mb-4"><button onClick={openAddService} className="bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-lg transition-all">Add New Service</button></div>
@@ -351,6 +366,50 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* ✅ Packages Tab */}
+        {activeTab === "packages" && (
+          <div className="space-y-4">
+            <div className="flex justify-end mb-4">
+              <button onClick={openAddPackage} className="bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-lg transition-all">Add New Package</button>
+            </div>
+            <div className="glass-card rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-zinc-400 uppercase bg-surface/50">
+                    <tr>
+                      <th className="px-6 py-3">Package Name</th>
+                      <th className="px-6 py-3">Service</th>
+                      <th className="px-6 py-3">Price Modifier</th>
+                      <th className="px-6 py-3">Status</th>
+                      <th className="px-6 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {packages.map((pkg) => (
+                      <tr key={pkg.id} className="border-b border-border hover:bg-surface/30 transition">
+                        <td className="px-6 py-4 font-medium text-white">{pkg.name}</td>
+                        <td className="px-6 py-4 text-zinc-400">{pkg.services?.name || "Unknown"}</td>
+                        <td className="px-6 py-4 text-zinc-300">{pkg.price_modifier}x</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded text-xs ${pkg.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                            {pkg.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right flex justify-end gap-2">
+                          <button onClick={() => openEditPackage(pkg)} className="text-blue-400 hover:text-blue-300 text-xs font-medium px-3 py-1 rounded hover:bg-blue-500/10 transition">Edit</button>
+                          <button onClick={() => handleDeletePackage(pkg)} className="text-red-400 hover:text-red-300 text-xs font-medium px-3 py-1 rounded hover:bg-red-500/10 transition">Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {packages.length === 0 && <div className="p-8 text-center text-zinc-500">No packages found. Add one to get started.</div>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Categories Tab */}
         {activeTab === "categories" && (
           <div className="space-y-4">
             <div className="flex justify-end mb-4"><button onClick={openAddCategory} className="bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-lg transition-all">Add New Category</button></div>
@@ -417,20 +476,17 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ✅ MODAL EDIT WORKER STATS (Berfungsi Penuh) */}
+        {/* Worker Stats Modal */}
         {showWorkerStatsModal && editingWorker && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-md">
               <h2 className="text-xl font-bold text-white mb-2">Edit Worker Stats</h2>
               <p className="text-zinc-400 text-sm mb-6">{editingWorker.full_name}</p>
-              
               <form onSubmit={handleSaveWorkerStats} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-1">Seniority Level</label>
                   <select value={workerStatsForm.seniority_level} onChange={(e) => setWorkerStatsForm({...workerStatsForm, seniority_level: e.target.value})} className="input-modern w-full">
-                    <option value="junior">Junior</option>
-                    <option value="mid">Mid</option>
-                    <option value="senior">Senior</option>
+                    <option value="junior">Junior</option><option value="mid">Mid</option><option value="senior">Senior</option>
                   </select>
                 </div>
                 <div>
@@ -443,16 +499,9 @@ export default function AdminDashboard() {
                   <p className="text-xs text-zinc-500 mt-1">You can adjust this manually if the auto-sync fails.</p>
                 </div>
                 <div className="flex flex-col gap-3 pt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={workerStatsForm.is_available} onChange={(e) => setWorkerStatsForm({...workerStatsForm, is_available: e.target.checked})} className="w-4 h-4 rounded border-zinc-600 text-primary focus:ring-primary bg-zinc-900" />
-                    <span className="text-sm text-zinc-300">Available for new orders</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={workerStatsForm.is_on_leave} onChange={(e) => setWorkerStatsForm({...workerStatsForm, is_on_leave: e.target.checked})} className="w-4 h-4 rounded border-zinc-600 text-red-500 focus:ring-red-500 bg-zinc-900" />
-                    <span className="text-sm text-zinc-300">Currently on leave</span>
-                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={workerStatsForm.is_available} onChange={(e) => setWorkerStatsForm({...workerStatsForm, is_available: e.target.checked})} className="w-4 h-4 rounded border-zinc-600 text-primary focus:ring-primary bg-zinc-900" /><span className="text-sm text-zinc-300">Available for new orders</span></label>
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={workerStatsForm.is_on_leave} onChange={(e) => setWorkerStatsForm({...workerStatsForm, is_on_leave: e.target.checked})} className="w-4 h-4 rounded border-zinc-600 text-red-500 focus:ring-red-500 bg-zinc-900" /><span className="text-sm text-zinc-300">Currently on leave</span></label>
                 </div>
-
                 <div className="flex gap-3 pt-4">
                   <button type="button" onClick={() => setShowWorkerStatsModal(false)} className="flex-1 btn-secondary">Cancel</button>
                   <button type="submit" disabled={savingWorkerStats} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 rounded-lg transition-all">{savingWorkerStats ? "Saving..." : "Save Changes"}</button>
@@ -462,7 +511,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Service & Category Modals (Tetap sama) */}
+        {/* Service Modal */}
         {(showAddService || editingService) && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -482,6 +531,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Category Modal */}
         {(showAddCategory || editingCategory) && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-md">
@@ -491,6 +541,45 @@ export default function AdminDashboard() {
                 <div><label className="block text-sm font-medium text-zinc-300 mb-2">Description</label><textarea value={categoryForm.description} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setCategoryForm({ ...categoryForm, description: e.target.value })} rows={2} placeholder="Brief description..." className="input-modern resize-none" /></div>
                 <div className="flex items-center gap-2"><input type="checkbox" id="category_is_active" checked={categoryForm.is_active} onChange={(e: ChangeEvent<HTMLInputElement>) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })} className="w-4 h-4" /><label htmlFor="category_is_active" className="text-sm text-zinc-300">Active</label></div>
                 <div className="flex gap-3 pt-4"><button type="button" onClick={() => { setShowAddCategory(false); setEditingCategory(null); }} className="flex-1 btn-secondary">Cancel</button><button type="submit" className="flex-1 bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-lg transition-all">{editingCategory ? "Update" : "Add"}</button></div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ✅ Package Modal */}
+        {(showAddPackage || editingPackage) && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+              <h2 className="text-xl font-bold text-white mb-6">{editingPackage ? "Edit Package" : "Add New Package"}</h2>
+              <form onSubmit={handleSavePackage} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1">Service</label>
+                  <select value={packageForm.service_id} onChange={(e: ChangeEvent<HTMLSelectElement>) => setPackageForm({...packageForm, service_id: e.target.value})} required className="input-modern w-full">
+                    <option value="">Select Service</option>
+                    {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1">Package Name</label>
+                  <input type="text" value={packageForm.name} onChange={(e: ChangeEvent<HTMLInputElement>) => setPackageForm({...packageForm, name: e.target.value})} required placeholder="e.g., Express, Premium" className="input-modern w-full" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1">Description (Optional)</label>
+                  <textarea value={packageForm.description} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setPackageForm({...packageForm, description: e.target.value})} rows={2} placeholder="e.g., Faster completion time" className="input-modern w-full resize-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1">Price Modifier (Multiplier)</label>
+                  <input type="number" step="0.1" min="0.1" value={packageForm.price_modifier} onChange={(e: ChangeEvent<HTMLInputElement>) => setPackageForm({...packageForm, price_modifier: parseFloat(e.target.value) || 1.0})} required className="input-modern w-full" />
+                  <p className="text-xs text-zinc-500 mt-1">1.0 = Base Price, 1.5 = 150% of Base Price</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="pkg_is_active" checked={packageForm.is_active} onChange={(e: ChangeEvent<HTMLInputElement>) => setPackageForm({...packageForm, is_active: e.target.checked})} className="w-4 h-4" />
+                  <label htmlFor="pkg_is_active" className="text-sm text-zinc-300">Active (visible in catalog)</label>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button type="button" onClick={() => { setShowAddPackage(false); setEditingPackage(null); }} className="flex-1 btn-secondary">Cancel</button>
+                  <button type="submit" className="flex-1 bg-primary hover:bg-primary-hover text-white font-semibold py-2.5 rounded-lg transition-all">{editingPackage ? "Update" : "Add"}</button>
+                </div>
               </form>
             </div>
           </div>

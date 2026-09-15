@@ -14,10 +14,24 @@ import WorkerDashboard from './pages/WorkerDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
 import HowToOrder from './pages/HowToOrder'
+import Cart from './pages/Cart' 
+
+import { CartProvider, useCart } from './context/CartContext'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 
-function App() {
+// ✅ Komponen Badge untuk menampilkan jumlah item di keranjang
+function CartBadge() {
+  const { totalItems } = useCart()
+  if (totalItems === 0) return null
+  return (
+    <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full animate-bounce">
+      {totalItems}
+    </span>
+  )
+}
+
+function AppContent() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
@@ -100,9 +114,7 @@ function App() {
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-2">
               {user ? (
-                // Menu jika SUDAH LOGIN
                 <>
-                  {/* ✅ TAMBAHAN: Link How to Order untuk user yang login */}
                   <Link to="/how-to-order" className="btn-ghost text-sm">How to Order</Link>
                   
                   {profile?.role === 'consumer' && (
@@ -114,6 +126,14 @@ function App() {
                   {profile?.role === 'admin' && (
                     <Link to="/admin" className="btn-ghost text-sm">Admin Panel</Link>
                   )}
+
+                  {/* ✅ LINK KERANJANG BELANJA (Desktop) */}
+                  <Link to="/cart" className="relative p-2 text-zinc-400 hover:text-white transition ml-2">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <CartBadge />
+                  </Link>
 
                   <Link to="/profile" className="flex items-center gap-2 ml-2 pl-3 border-l border-border">
                     {profile?.avatar_url ? (
@@ -134,10 +154,17 @@ function App() {
                   <button onClick={handleLogout} className="btn-ghost text-sm ml-2">Sign Out</button>
                 </>
               ) : (
-                // Menu jika BELUM LOGIN
                 <>
-                  {/* ✅ TAMBAHAN: Link How to Order untuk user yang belum login */}
                   <Link to="/how-to-order" className="btn-ghost text-sm">How to Order</Link>
+                  
+                  {/* ✅ LINK KERANJANG BELANJA (Guest) */}
+                  <Link to="/cart" className="relative p-2 text-zinc-400 hover:text-white transition">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <CartBadge />
+                  </Link>
+
                   <Link to="/login" className="btn-ghost text-sm">Sign In</Link>
                   <Link to="/register" className="bg-primary hover:bg-primary-hover text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all">
                     Register
@@ -162,9 +189,14 @@ function App() {
             <div className="md:hidden py-4 border-t border-border space-y-2 fade-in">
               {user ? (
                 <>
-                  {/* ✅ TAMBAHAN: Link How to Order di Mobile Menu (Login) */}
                   <Link to="/how-to-order" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">How to Order</Link>
                   
+                  {/* ✅ LINK KERANJANG BELANJA (Mobile) */}
+                  <Link to="/cart" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg flex items-center gap-2">
+                    <span>My Cart</span>
+                    <CartBadge />
+                  </Link>
+
                   {profile?.role === 'consumer' && (
                     <Link to="/orders" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">My Orders</Link>
                   )}
@@ -175,12 +207,17 @@ function App() {
                     <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">Admin Panel</Link>
                   )}
                   <Link to="/profile" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">My Profile</Link>
-                  <button onClick={handleLogout} className="w-full text-left px-3 py-2 text-red-400 hover:bg-surface-hover rounded-lg">Sign Out</button>
+                  <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left px-3 py-2 text-red-400 hover:bg-surface-hover rounded-lg">Sign Out</button>
                 </>
               ) : (
                 <>
-                  {/* ✅ TAMBAHAN: Link How to Order di Mobile Menu (Belum Login) */}
                   <Link to="/how-to-order" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">How to Order</Link>
+                  
+                  <Link to="/cart" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg flex items-center gap-2">
+                    <span>My Cart</span>
+                    <CartBadge />
+                  </Link>
+
                   <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">Sign In</Link>
                   <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-primary hover:bg-surface-hover rounded-lg font-medium">Register</Link>
                 </>
@@ -196,12 +233,15 @@ function App() {
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         
-        {/* Public Routes (Bisa diakses siapa saja) */}
+        {/* Public Routes */}
         <Route path="/" element={<Catalog />} />
         <Route path="/service/:id" element={<ServiceDetail />} />
         <Route path="/how-to-order" element={<HowToOrder />} />
         
-        {/* Protected Routes (Wajib Login) */}
+        {/* ✅ CART ROUTE */}
+        <Route path="/cart" element={<Cart />} />
+        
+        {/* Protected Routes */}
         <Route path="/order/:id" element={user ? <OrderTracking /> : <Navigate to="/login" />} />
         <Route path="/orders" element={user && profile?.role === 'consumer' ? <MyOrders /> : <Navigate to="/login" />} />
         <Route path="/worker" element={user && profile?.role === 'worker' ? <WorkerDashboard /> : <Navigate to="/login" />} />
@@ -215,4 +255,11 @@ function App() {
   )
 }
 
-export default App
+// ✅ Bungkus seluruh aplikasi dengan CartProvider agar useCart bisa diakses di mana saja
+export default function App() {
+  return (
+    <CartProvider>
+      <AppContent />
+    </CartProvider>
+  )
+}
