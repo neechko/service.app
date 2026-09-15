@@ -6,10 +6,8 @@ import OrderChat from "../components/OrderChat";
 import { compressImage } from "../lib/imageUtils";
 import { showAlert } from "../lib/dialog";
 
-type OrderTask = Database["public"]["Tables"]["order_tasks"]["Row"];
-
 type Order = Database["public"]["Tables"]["orders"]["Row"] & {
-  services: { name: string; category: string; description: string | null } | null;
+  services: { name: string; category: string; description: string | null; estimated_hours: number } | null;
   consumer_profile: { full_name: string; phone: string | null } | null;
   worker_profile: { full_name: string; phone: string | null } | null;
 };
@@ -38,27 +36,12 @@ export default function OrderTracking() {
   const [newReviewComment, setNewReviewComment] = useState<string>("");
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
 
-  // ✅ State untuk Task Checklist
-  const [tasks, setTasks] = useState<OrderTask[]>([]);
-  const [updatingTask, setUpdatingTask] = useState<string | null>(null);
-  
-  // ✅ State untuk Menambahkan Task Baru
-  const [showAddTaskModal, setShowAddTaskModal] = useState<boolean>(false);
-  const [newTaskName, setNewTaskName] = useState<string>("");
-  const [newTaskDesc, setNewTaskDesc] = useState<string>("");
-  const [newTaskPriority, setNewTaskPriority] = useState<"high" | "normal" | "low">("normal");
-  const [newTaskMins, setNewTaskMins] = useState<number>(30);
-  const [addingTask, setAddingTask] = useState<boolean>(false);
-
-  useEffect(() => {
-    fetchOrder();
-  }, [id]);
+  useEffect(() => { fetchOrder(); }, [id]);
 
   async function fetchOrder() {
     if (!id) return;
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-
     if (!user) { navigate("/login"); return; }
     setCurrentUserId(user.id);
 
@@ -67,7 +50,7 @@ export default function OrderTracking() {
 
     const { data: orderData, error } = await supabase
       .from("orders")
-      .select(`*, services(name, category, description), consumer_profile:profiles!orders_consumer_id_fkey(full_name, phone), worker_profile:profiles!orders_worker_id_fkey(full_name, phone)`)
+      .select(`*, services(name, category, description, estimated_hours), consumer_profile:profiles!orders_consumer_id_fkey(full_name, phone), worker_profile:profiles!orders_worker_id_fkey(full_name, phone)`)
       .eq("id", id).single();
 
     if (error || !orderData) { setLoading(false); return; }
@@ -78,63 +61,11 @@ export default function OrderTracking() {
     const { data: progressData } = await supabase.from("progress_updates").select("*").eq("order_id", id).order("created_at", { ascending: false });
     setProgressUpdates((progressData as ProgressUpdate[]) || []);
 
-    const { data: tasksData } = await supabase
-      .from("order_tasks")
-      .select("*")
-      .eq("order_id", id)
-      .order("priority_level", { ascending: true })
-      .order("created_at", { ascending: true });
-    setTasks((tasksData as OrderTask[]) || []);
-
     if (user.id === orderData.consumer_id) {
       const { data: reviewData } = await supabase.from("reviews").select("*").eq("order_id", id).single();
       setExistingReview(reviewData);
     }
     setLoading(false);
-  }
-
-  // ✅ Fungsi Tambah Task Baru (Agar tidak cuma pajangan)
-  async function handleAddTask(e: FormEvent) {
-    e.preventDefault();
-    if (!newTaskName.trim() || !order) return;
-    setAddingTask(true);
-    try {
-      const { error } = await supabase.from("order_tasks").insert([{
-        order_id: order.id,
-        task_name: newTaskName.trim(),
-        description: newTaskDesc.trim(),
-        priority_level: newTaskPriority,
-        estimated_mins: newTaskMins
-      }]);
-      if (error) throw error;
-      
-      setShowAddTaskModal(false);
-      setNewTaskName(""); setNewTaskDesc(""); setNewTaskPriority("normal"); setNewTaskMins(30);
-      fetchOrder(); // Refresh daftar task
-    } catch (err) {
-      await showAlert({ title: "Error", message: "Failed to add task.", type: "danger" });
-    }
-    setAddingTask(false);
-  }
-
-  async function handleToggleTask(taskId: string, currentStatus: boolean) {
-    setUpdatingTask(taskId);
-    try {
-      const updates: any = { is_completed: !currentStatus };
-      if (!currentStatus) {
-        updates.started_at = new Date().toISOString();
-        updates.completed_at = new Date().toISOString();
-      } else {
-        updates.completed_at = null;
-      }
-
-      const { error } = await supabase.from("order_tasks").update(updates).eq("id", taskId);
-      if (error) throw error;
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)));
-    } catch (err) {
-      await showAlert({ title: "Error", message: "Failed to update task.", type: "danger" });
-    }
-    setUpdatingTask(null);
   }
 
   async function handleProgressUpdate(e: FormEvent<HTMLFormElement>) {
@@ -253,55 +184,77 @@ export default function OrderTracking() {
           )}
         </div>
 
-        {/* ✅ TASK CHECKLIST (Sekarang dengan Tombol "Add Task" yang berfungsi) */}
-        <div className="glass-card rounded-2xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-              Task Checklist & Priority
-            </h3>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-400">{tasks.filter((t) => t.is_completed).length} / {tasks.length} Completed</span>
-              {/* ✅ TOMBOL TAMBAH TASK (Hanya untuk Admin & Worker) */}
-              {(userRole === "admin" || userRole === "worker") && (
-                <button onClick={() => setShowAddTaskModal(true)} className="text-xs bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-lg transition-all flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                  Add Task
-                </button>
-              )}
-            </div>
-          </div>
+        {/* ✅ AUTOMATED TIMELINE & DEADLINE TRACKER (Pengganti Checklist Manual) */}
+        <div className="glass-card rounded-2xl p-6 mb-6 border border-border">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Automated Schedule & Fairness Tracker
+          </h3>
 
-          {tasks.length === 0 ? (
-            <div className="text-center py-8 bg-surface/30 rounded-xl border border-border border-dashed">
-              <p className="text-zinc-500 text-sm">No tasks added yet.</p>
-              <p className="text-zinc-600 text-xs mt-1">Admin or Worker can add specific tasks using the button above.</p>
+          {!order.assigned_at ? (
+            <div className="text-center py-6 bg-surface/30 rounded-xl border border-border border-dashed">
+              <p className="text-zinc-500 text-sm">Order has not been assigned to a worker yet.</p>
+              <p className="text-zinc-600 text-xs mt-1">Timeline will be generated automatically upon assignment.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {tasks.map((task) => {
-                const isHighPriority = task.priority_level === "high";
-                const isCompleted = task.is_completed ?? false;
-                return (
-                  <div key={task.id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isCompleted ? "bg-green-500/5 border-green-500/20" : "bg-surface/50 border-border hover:border-primary/30"}`}>
-                    <button onClick={() => handleToggleTask(task.id, isCompleted)} disabled={updatingTask === task.id || userRole === "consumer"} className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${isCompleted ? "bg-green-500 border-green-500 text-white" : "border-zinc-600 hover:border-primary bg-zinc-900"}`}>
-                      {updatingTask === task.id ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : isCompleted ? <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> : null}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className={`font-medium text-sm ${isCompleted ? "text-zinc-500 line-through" : "text-white"}`}>{task.task_name}</h4>
-                        {isHighPriority && !isCompleted && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 uppercase tracking-wider">High Priority</span>}
-                      </div>
-                      {task.description && <p className={`text-xs mb-2 ${isCompleted ? "text-zinc-600" : "text-zinc-400"}`}>{task.description}</p>}
-                      <div className="flex flex-wrap gap-3 text-[11px] text-zinc-500">
-                        <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>Est: {task.estimated_mins ?? 0} mins</span>
-                        {task.started_at && <span className="flex items-center gap-1 text-blue-400"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>Started: {new Date(task.started_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>}
-                        {task.completed_at && <span className="flex items-center gap-1 text-green-400"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>Completed: {new Date(task.completed_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>}
-                      </div>
-                    </div>
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                  <div className="w-0.5 h-full bg-border my-1"></div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">Assigned to Worker</p>
+                  <p className="text-xs text-zinc-400">{formatDate(order.assigned_at)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-3 h-3 rounded-full bg-primary"></div>
+                  <div className="w-0.5 h-full bg-border my-1"></div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">Estimated Duration</p>
+                  <p className="text-xs text-zinc-400">{order.services?.estimated_hours || 1} Hours (Based on Service Package)</p>
+                </div>
+              </div>
+
+              {order.expected_completion_at && order.status !== 'completed' && order.status !== 'cancelled' && (
+                <div className="flex items-start gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className={`w-3 h-3 rounded-full ${new Date() > new Date(order.expected_completion_at) ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
                   </div>
-                );
-              })}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-white">Target Deadline</p>
+                      {new Date() > new Date(order.expected_completion_at) ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 uppercase">OVERDUE</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 uppercase">ON TRACK</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-1">{formatDate(order.expected_completion_at)}</p>
+                    
+                    <div className="mt-2 w-full bg-zinc-900 rounded-full h-2 overflow-hidden">
+                      {(() => {
+                        const start = new Date(order.assigned_at!).getTime();
+                        const end = new Date(order.expected_completion_at!).getTime();
+                        const now = new Date().getTime();
+                        const total = end - start;
+                        const elapsed = now - start;
+                        const percentage = Math.min(100, Math.max(0, (elapsed / total) * 100));
+                        return (
+                          <div className={`h-2 rounded-full transition-all duration-1000 ${percentage >= 100 ? 'bg-red-500' : (percentage >= 75 ? 'bg-yellow-500' : 'bg-primary')}`} style={{ width: `${percentage}%` }}></div>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1 text-right">Time Elapsed</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -370,44 +323,6 @@ export default function OrderTracking() {
             )}
           </div>
         </div>
-
-        {/* ✅ MODAL TAMBAH TASK BARU */}
-        {showAddTaskModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
-            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
-              <h2 className="text-xl font-bold text-white mb-2">Add New Task</h2>
-              <p className="text-zinc-400 text-sm mb-6">Define a specific task for this order.</p>
-              <form onSubmit={handleAddTask} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-300 mb-1">Task Name *</label>
-                  <input type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} required placeholder="e.g., Clear Daily Commissions" className="input-modern w-full" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-300 mb-1">Description (Optional)</label>
-                  <textarea value={newTaskDesc} onChange={(e) => setNewTaskDesc(e.target.value)} rows={2} placeholder="Additional details..." className="input-modern w-full resize-none" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-1">Priority</label>
-                    <select value={newTaskPriority} onChange={(e) => setNewTaskPriority(e.target.value as any)} className="input-modern w-full">
-                      <option value="high">High</option>
-                      <option value="normal">Normal</option>
-                      <option value="low">Low</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-1">Est. Minutes</label>
-                    <input type="number" value={newTaskMins} onChange={(e) => setNewTaskMins(parseInt(e.target.value) || 0)} required min="1" className="input-modern w-full" />
-                  </div>
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowAddTaskModal(false)} className="flex-1 btn-secondary">Cancel</button>
-                  <button type="submit" disabled={addingTask} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 rounded-lg transition-all">{addingTask ? "Adding..." : "Add Task"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
 
         {/* Modal Update Progress */}
         {showProgressModal && (

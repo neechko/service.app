@@ -4,33 +4,17 @@ import { supabase } from "../lib/supabase";
 import { Database } from "../types/database";
 import { showConfirm, showAlert } from "../lib/dialog";
 
-// Tipe dasar dari database
 type Service = Database["public"]["Tables"]["services"]["Row"];
 type Category = Database["public"]["Tables"]["categories"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
-// Tipe Order dengan relasi
 type Order = Database["public"]["Tables"]["orders"]["Row"] & {
   services: { name: string } | null;
   profiles: { full_name: string; phone: string | null } | null;
 };
 
-// Tipe Form
-type ServiceForm = {
-  name: string;
-  category: string;
-  description: string;
-  base_price: number;
-  estimated_hours: number;
-  is_active: boolean;
-};
-
-type CategoryForm = {
-  name: string;
-  slug: string;
-  description: string;
-  is_active: boolean;
-};
+type ServiceForm = { name: string; category: string; description: string; base_price: number; estimated_hours: number; is_active: boolean };
+type CategoryForm = { name: string; slug: string; description: string; is_active: boolean };
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -41,28 +25,26 @@ export default function AdminDashboard() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  
   const [assigningOrder, setAssigningOrder] = useState<Order | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<string>("");
 
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [showAddService, setShowAddService] = useState<boolean>(false);
-  const [serviceForm, setServiceForm] = useState<ServiceForm>({
-    name: "", category: "", description: "", base_price: 0, estimated_hours: 1, is_active: true,
-  });
+  const [serviceForm, setServiceForm] = useState<ServiceForm>({ name: "", category: "", description: "", base_price: 0, estimated_hours: 1, is_active: true });
 
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [showAddCategory, setShowAddCategory] = useState<boolean>(false);
-  const [categoryForm, setCategoryForm] = useState<CategoryForm>({
-    name: "", slug: "", description: "", is_active: true,
-  });
+  const [categoryForm, setCategoryForm] = useState<CategoryForm>({ name: "", slug: "", description: "", is_active: true });
 
-  // ✅ State untuk Edit Worker Stats
+  // ✅ State untuk Edit Worker Stats (Termasuk Load Manual)
   const [showWorkerStatsModal, setShowWorkerStatsModal] = useState<boolean>(false);
   const [editingWorker, setEditingWorker] = useState<Profile | null>(null);
   const [savingWorkerStats, setSavingWorkerStats] = useState<boolean>(false);
   const [workerStatsForm, setWorkerStatsForm] = useState({
     seniority_level: "junior",
     max_capacity: 3,
+    current_active_orders: 0,
     is_available: true,
     is_on_leave: false
   });
@@ -76,9 +58,7 @@ export default function AdminDashboard() {
     { id: "categories", label: "Categories" },
   ];
 
-  useEffect(() => {
-    fetchAllData();
-  }, []);
+  useEffect(() => { fetchAllData(); }, []);
 
   async function fetchAllData() {
     setLoading(true);
@@ -105,11 +85,7 @@ export default function AdminDashboard() {
   }
 
   async function handleDeleteUser(userId: string, userName: string) {
-    const confirmed = await showConfirm({
-      title: 'Delete User',
-      message: `Are you sure you want to delete user "${userName}"?\nThis will remove their profile data.`,
-      confirmText: 'Delete', cancelText: 'Cancel', type: 'danger',
-    });
+    const confirmed = await showConfirm({ title: 'Delete User', message: `Are you sure you want to delete user "${userName}"?\nThis will remove their profile data.`, confirmText: 'Delete', cancelText: 'Cancel', type: 'danger' });
     if (!confirmed) return;
     const { error } = await supabase.from("profiles").delete().eq("id", userId);
     if (error) await showAlert({ title: 'Error', message: "Failed to delete user: " + error.message, type: 'danger' });
@@ -128,25 +104,24 @@ export default function AdminDashboard() {
     }
   }
 
+  // ✅ Fungsi Simpan Worker Stats (Bisa ubah Load manual jika perlu)
   async function handleSaveWorkerStats(e: FormEvent) {
     e.preventDefault();
     if (!editingWorker) return;
     setSavingWorkerStats(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          seniority_level: workerStatsForm.seniority_level,
-          max_capacity: workerStatsForm.max_capacity,
-          is_available: workerStatsForm.is_available,
-          is_on_leave: workerStatsForm.is_on_leave
-        })
-        .eq("id", editingWorker.id);
+      const { error } = await supabase.from("profiles").update({
+        seniority_level: workerStatsForm.seniority_level,
+        max_capacity: workerStatsForm.max_capacity,
+        current_active_orders: workerStatsForm.current_active_orders,
+        is_available: workerStatsForm.is_available,
+        is_on_leave: workerStatsForm.is_on_leave
+      }).eq("id", editingWorker.id);
       
       if (error) throw error;
       setShowWorkerStatsModal(false);
       setEditingWorker(null);
-      fetchAllData(); // Refresh data
+      fetchAllData();
     } catch (err) {
       await showAlert({ title: "Error", message: "Failed to update worker stats.", type: "danger" });
     }
@@ -154,14 +129,8 @@ export default function AdminDashboard() {
   }
 
   // Services CRUD
-  function openAddService() {
-    setServiceForm({ name: "", category: categories[0]?.slug || "", description: "", base_price: 0, estimated_hours: 1, is_active: true });
-    setShowAddService(true);
-  }
-  function openEditService(service: Service) {
-    setServiceForm({ name: service.name, category: service.category, description: service.description || "", base_price: service.base_price, estimated_hours: service.estimated_hours || 1, is_active: service.is_active ?? true });
-    setEditingService(service);
-  }
+  function openAddService() { setServiceForm({ name: "", category: categories[0]?.slug || "", description: "", base_price: 0, estimated_hours: 1, is_active: true }); setShowAddService(true); }
+  function openEditService(service: Service) { setServiceForm({ name: service.name, category: service.category, description: service.description || "", base_price: service.base_price, estimated_hours: service.estimated_hours || 1, is_active: service.is_active ?? true }); setEditingService(service); }
   async function handleSaveService(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (editingService) {
@@ -174,10 +143,7 @@ export default function AdminDashboard() {
       else { setShowAddService(false); fetchAllData(); }
     }
   }
-  async function handleToggleActive(service: Service) {
-    await supabase.from("services").update({ is_active: !service.is_active }).eq("id", service.id);
-    fetchAllData();
-  }
+  async function handleToggleActive(service: Service) { await supabase.from("services").update({ is_active: !service.is_active }).eq("id", service.id); fetchAllData(); }
   async function handleDeleteService(service: Service) {
     const confirmed = await showConfirm({ title: 'Delete Service', message: `Delete "${service.name}"?`, type: 'danger' });
     if (!confirmed) return;
@@ -187,10 +153,7 @@ export default function AdminDashboard() {
 
   // Categories CRUD
   function openAddCategory() { setCategoryForm({ name: "", slug: "", description: "", is_active: true }); setShowAddCategory(true); }
-  function openEditCategory(category: Category) {
-    setCategoryForm({ name: category.name, slug: category.slug, description: category.description || "", is_active: category.is_active ?? true });
-    setEditingCategory(category);
-  }
+  function openEditCategory(category: Category) { setCategoryForm({ name: category.name, slug: category.slug, description: category.description || "", is_active: category.is_active ?? true }); setEditingCategory(category); }
   function generateSlug(name: string): string { return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""); }
   async function handleSaveCategory(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -204,30 +167,18 @@ export default function AdminDashboard() {
       else { setShowAddCategory(false); fetchAllData(); }
     }
   }
-  async function handleToggleCategoryActive(category: Category) {
-    await supabase.from("categories").update({ is_active: !category.is_active }).eq("id", category.id);
-    fetchAllData();
-  }
+  async function handleToggleCategoryActive(category: Category) { await supabase.from("categories").update({ is_active: !category.is_active }).eq("id", category.id); fetchAllData(); }
   async function handleDeleteCategory(category: Category) {
     const { data } = await supabase.from("services").select("id").eq("category", category.slug);
-    if (data && data.length > 0) {
-      await showAlert({ title: 'Cannot Delete', message: `${data.length} services still use this category.`, type: 'warning' });
-      return;
-    }
+    if (data && data.length > 0) { await showAlert({ title: 'Cannot Delete', message: `${data.length} services still use this category.`, type: 'warning' }); return; }
     const confirmed = await showConfirm({ title: 'Delete Category', message: `Delete "${category.name}"?`, type: 'danger' });
     if (!confirmed) return;
     await supabase.from("categories").delete().eq("id", category.id);
     fetchAllData();
   }
 
-  const formatRupiah = (angka: number | null | undefined) => {
-    if (!angka) return "Rp 0";
-    return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(angka);
-  };
-  const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  };
+  const formatRupiah = (angka: number | null | undefined) => { if (!angka) return "Rp 0"; return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(angka); };
+  const formatDate = (dateString: string | null | undefined) => { if (!dateString) return "N/A"; return new Date(dateString).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
 
   const stats = {
     totalOrders: orders.length,
@@ -236,13 +187,7 @@ export default function AdminDashboard() {
     totalWorkers: workers.length,
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
-      </div>
-    );
-  }
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin"></div></div>;
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -254,30 +199,16 @@ export default function AdminDashboard() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="glass-card rounded-xl p-5">
-            <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Total Orders</p>
-            <p className="text-2xl font-bold text-white">{stats.totalOrders}</p>
-          </div>
-          <div className="glass-card rounded-xl p-5">
-            <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Active Orders</p>
-            <p className="text-2xl font-bold text-primary-light">{stats.activeOrders}</p>
-          </div>
-          <div className="glass-card rounded-xl p-5">
-            <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Total Revenue</p>
-            <p className="text-2xl font-bold gradient-text">{formatRupiah(stats.totalRevenue)}</p>
-          </div>
-          <div className="glass-card rounded-xl p-5">
-            <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Workers</p>
-            <p className="text-2xl font-bold text-white">{stats.totalWorkers}</p>
-          </div>
+          <div className="glass-card rounded-xl p-5"><p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Total Orders</p><p className="text-2xl font-bold text-white">{stats.totalOrders}</p></div>
+          <div className="glass-card rounded-xl p-5"><p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Active Orders</p><p className="text-2xl font-bold text-primary-light">{stats.activeOrders}</p></div>
+          <div className="glass-card rounded-xl p-5"><p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Total Revenue</p><p className="text-2xl font-bold gradient-text">{formatRupiah(stats.totalRevenue)}</p></div>
+          <div className="glass-card rounded-xl p-5"><p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Workers</p><p className="text-2xl font-bold text-white">{stats.totalWorkers}</p></div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 border-b border-border overflow-x-auto">
           {tabs.map((tab) => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 py-2.5 font-medium text-sm transition-all whitespace-nowrap ${activeTab === tab.id ? "text-white border-b-2 border-primary" : "text-zinc-500 hover:text-zinc-300"}`}>
-              {tab.label}
-            </button>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 py-2.5 font-medium text-sm transition-all whitespace-nowrap ${activeTab === tab.id ? "text-white border-b-2 border-primary" : "text-zinc-500 hover:text-zinc-300"}`}>{tab.label}</button>
           ))}
         </div>
 
@@ -287,14 +218,8 @@ export default function AdminDashboard() {
             <h3 className="font-bold text-white mb-4">Recent Orders</h3>
             {orders.slice(0, 5).map((order) => (
               <div key={order.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                <div>
-                  <p className="text-white font-medium text-sm">{order.services?.name || "Unknown Service"}</p>
-                  <p className="text-zinc-500 text-xs">{order.profiles?.full_name || "Unknown"} • {formatDate(order.created_at)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-white font-semibold text-sm">{formatRupiah(order.total_price)}</p>
-                  <p className="text-xs text-zinc-500 capitalize">{(order.status || "pending").replace("_", " ")}</p>
-                </div>
+                <div><p className="text-white font-medium text-sm">{order.services?.name || "Unknown Service"}</p><p className="text-zinc-500 text-xs">{order.profiles?.full_name || "Unknown"} • {formatDate(order.created_at)}</p></div>
+                <div className="text-right"><p className="text-white font-semibold text-sm">{formatRupiah(order.total_price)}</p><p className="text-xs text-zinc-500 capitalize">{(order.status || "pending").replace("_", " ")}</p></div>
               </div>
             ))}
             {orders.length === 0 && <p className="text-zinc-500 text-center py-8">No orders yet.</p>}
@@ -304,35 +229,24 @@ export default function AdminDashboard() {
         {/* Orders Tab */}
         {activeTab === "orders" && (
           <div className="space-y-4">
-            {orders.length === 0 ? (
-              <div className="glass-card rounded-2xl p-12 text-center"><p className="text-zinc-400">No orders yet.</p></div>
-            ) : (
-              orders.map((order) => (
-                <div key={order.id} className="glass-card rounded-2xl p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-white">{order.services?.name || "Unknown Service"}</h3>
-                      <p className="text-zinc-500 text-sm">Order #{order.id.slice(0, 8)}</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-md text-xs font-semibold uppercase border ${order.status === "completed" ? "bg-green-500/10 text-green-400 border-green-500/30" : order.status === "in_progress" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : order.status === "paid" ? "bg-purple-500/10 text-purple-400 border-purple-500/30" : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"}`}>
-                      {(order.status || "pending").replace("_", " ")}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                    <div><p className="text-zinc-500 text-xs">Customer</p><p className="text-white">{order.profiles?.full_name || "-"}</p></div>
-                    <div><p className="text-zinc-500 text-xs">Worker</p><p className="text-white">{order.worker_id ? workers.find((w) => w.id === order.worker_id)?.full_name || "Unknown" : "Unassigned"}</p></div>
-                    <div><p className="text-zinc-500 text-xs">Amount</p><p className="text-white font-semibold">{formatRupiah(order.total_price)}</p></div>
-                    <div><p className="text-zinc-500 text-xs">Progress</p><p className="text-primary-light font-semibold">{order.current_percentage || 0}%</p></div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => navigate("/order/" + order.id)} className="flex-1 btn-secondary text-sm">View Details</button>
-                    <button onClick={() => setAssigningOrder(order)} className={`flex-1 text-white font-semibold py-2 rounded-lg text-sm transition-all ${order.worker_id ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-primary-hover'}`}>
-                      {order.worker_id ? 'Reassign Worker' : 'Assign Worker'}
-                    </button>
-                  </div>
+            {orders.length === 0 ? <div className="glass-card rounded-2xl p-12 text-center"><p className="text-zinc-400">No orders yet.</p></div> : orders.map((order) => (
+              <div key={order.id} className="glass-card rounded-2xl p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div><h3 className="text-lg font-bold text-white">{order.services?.name || "Unknown Service"}</h3><p className="text-zinc-500 text-sm">Order #{order.id.slice(0, 8)}</p></div>
+                  <span className={`px-3 py-1 rounded-md text-xs font-semibold uppercase border ${order.status === "completed" ? "bg-green-500/10 text-green-400 border-green-500/30" : order.status === "in_progress" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : order.status === "paid" ? "bg-purple-500/10 text-purple-400 border-purple-500/30" : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"}`}>{(order.status || "pending").replace("_", " ")}</span>
                 </div>
-              ))
-            )}
+                <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                  <div><p className="text-zinc-500 text-xs">Customer</p><p className="text-white">{order.profiles?.full_name || "-"}</p></div>
+                  <div><p className="text-zinc-500 text-xs">Worker</p><p className="text-white">{order.worker_id ? workers.find((w) => w.id === order.worker_id)?.full_name || "Unknown" : "Unassigned"}</p></div>
+                  <div><p className="text-zinc-500 text-xs">Amount</p><p className="text-white font-semibold">{formatRupiah(order.total_price)}</p></div>
+                  <div><p className="text-zinc-500 text-xs">Progress</p><p className="text-primary-light font-semibold">{order.current_percentage || 0}%</p></div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => navigate("/order/" + order.id)} className="flex-1 btn-secondary text-sm">View Details</button>
+                  <button onClick={() => setAssigningOrder(order)} className={`flex-1 text-white font-semibold py-2 rounded-lg text-sm transition-all ${order.worker_id ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-primary-hover'}`}>{order.worker_id ? 'Reassign Worker' : 'Assign Worker'}</button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -347,12 +261,7 @@ export default function AdminDashboard() {
                 <tbody>
                   {users.map((user) => (
                     <tr key={user.id} className="border-b border-border hover:bg-surface/30 transition">
-                      <td className="px-6 py-4 font-medium text-white">
-                        <div className="flex items-center gap-3">
-                          {user.avatar_url ? <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-white font-bold text-xs">{user.full_name?.[0]?.toUpperCase() || "U"}</div>}
-                          {user.full_name || "Unknown"}
-                        </div>
-                      </td>
+                      <td className="px-6 py-4 font-medium text-white"><div className="flex items-center gap-3">{user.avatar_url ? <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-white font-bold text-xs">{user.full_name?.[0]?.toUpperCase() || "U"}</div>}{user.full_name || "Unknown"}</div></td>
                       <td className="px-6 py-4 text-zinc-400">{user.email || "-"}</td>
                       <td className="px-6 py-4">
                         <select value={user.role || "consumer"} onChange={(e: ChangeEvent<HTMLSelectElement>) => handleChangeRole(user.id, e.target.value)} className="bg-surface border border-border text-white text-xs rounded-lg px-2 py-1 focus:ring-primary focus:border-primary">
@@ -360,9 +269,7 @@ export default function AdminDashboard() {
                         </select>
                       </td>
                       <td className="px-6 py-4 text-zinc-400">{formatDate(user.created_at)}</td>
-                      <td className="px-6 py-4 text-right">
-                        <button onClick={() => handleDeleteUser(user.id, user.full_name || "User")} className="text-red-400 hover:text-red-300 text-xs font-medium px-3 py-1 rounded hover:bg-red-500/10 transition">Delete</button>
-                      </td>
+                      <td className="px-6 py-4 text-right"><button onClick={() => handleDeleteUser(user.id, user.full_name || "User")} className="text-red-400 hover:text-red-300 text-xs font-medium px-3 py-1 rounded hover:bg-red-500/10 transition">Delete</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -372,92 +279,65 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* ✅ Workers Tab (Dengan Tombol Edit Stats yang Berfungsi) */}
         {activeTab === "workers" && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {workers.length === 0 ? (
-              <div className="col-span-full glass-card rounded-2xl p-12 text-center"><p className="text-zinc-400">No workers registered.</p></div>
-            ) : (
-              workers.map((worker) => {
-                const load = worker.current_active_orders || 0;
-                const cap = worker.max_capacity || 3;
-                
-                return (
-                  <div key={worker.id} className="glass-card rounded-2xl p-6 relative group">
-                    {/* Tombol Edit Stats */}
-                    <button 
-                      onClick={() => {
-                        setEditingWorker(worker);
-                        setWorkerStatsForm({
-                          seniority_level: worker.seniority_level || "junior",
-                          max_capacity: worker.max_capacity || 3,
-                          is_available: worker.is_available ?? true,
-                          is_on_leave: worker.is_on_leave ?? false
-                        });
-                        setShowWorkerStatsModal(true);
-                      }}
-                      className="absolute top-4 right-4 p-2 bg-surface hover:bg-surface-hover rounded-lg border border-border transition-all"
-                      title="Edit Worker Stats"
-                    >
-                      <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </button>
+            {workers.length === 0 ? <div className="col-span-full glass-card rounded-2xl p-12 text-center"><p className="text-zinc-400">No workers registered.</p></div> : workers.map((worker) => {
+              const load = worker.current_active_orders || 0;
+              const cap = worker.max_capacity || 3;
+              return (
+                <div key={worker.id} className="glass-card rounded-2xl p-6 relative group">
+                  <button onClick={() => {
+                    setEditingWorker(worker);
+                    setWorkerStatsForm({
+                      seniority_level: worker.seniority_level || "junior",
+                      max_capacity: worker.max_capacity || 3,
+                      current_active_orders: worker.current_active_orders || 0,
+                      is_available: worker.is_available ?? true,
+                      is_on_leave: worker.is_on_leave ?? false
+                    });
+                    setShowWorkerStatsModal(true);
+                  }} className="absolute top-4 right-4 p-2 bg-surface hover:bg-surface-hover rounded-lg border border-border transition-all" title="Edit Worker Stats">
+                    <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  </button>
 
-                    <div className="mb-3">
-                      {worker.avatar_url ? (
-                        <img src={worker.avatar_url} alt={worker.full_name} className="w-12 h-12 rounded-full object-cover border-2 border-primary" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center">
-                          <span className="text-white font-bold text-lg">{worker.full_name?.[0]?.toUpperCase() || "W"}</span>
-                        </div>
-                      )}
+                  <div className="mb-3">{worker.avatar_url ? <img src={worker.avatar_url} alt={worker.full_name} className="w-12 h-12 rounded-full object-cover border-2 border-primary" /> : <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center"><span className="text-white font-bold text-lg">{worker.full_name?.[0]?.toUpperCase() || "W"}</span></div>}</div>
+                  <h3 className="text-lg font-bold text-white">{worker.full_name}</h3>
+                  <p className="text-zinc-400 text-sm">{worker.phone || "No phone"}</p>
+                  
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-zinc-500">Status:</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${worker.is_on_leave ? 'bg-red-500/10 text-red-400' : (worker.is_available ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400')}`}>
+                        {worker.is_on_leave ? 'On Leave' : (worker.is_available ? 'Available' : 'Busy')}
+                      </span>
                     </div>
-                    <h3 className="text-lg font-bold text-white">{worker.full_name}</h3>
-                    <p className="text-zinc-400 text-sm">{worker.phone || "No phone"}</p>
-                    
-                    <div className="mt-4 space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-500">Status:</span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${worker.is_on_leave ? 'bg-red-500/10 text-red-400' : (worker.is_available ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400')}`}>
-                          {worker.is_on_leave ? 'On Leave' : (worker.is_available ? 'Available' : 'Busy')}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-500">Seniority:</span>
-                        <span className="text-white capitalize">{worker.seniority_level || 'Junior'}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-500">Current Load:</span>
-                        <span className="text-primary-light font-bold">{load} / {cap}</span>
-                      </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-zinc-500">Seniority:</span>
+                      <span className="text-white capitalize">{worker.seniority_level || 'Junior'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-zinc-500">Current Load:</span>
+                      <span className="text-primary-light font-bold">{load} / {cap}</span>
                     </div>
                   </div>
-                );
-              })
-            )}
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Services Tab */}
+        {/* Services & Categories Tabs (Disingkat untuk fokus, tetap berfungsi normal) */}
         {activeTab === "services" && (
           <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <button onClick={openAddService} className="bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-lg transition-all">Add New Service</button>
-            </div>
+            <div className="flex justify-end mb-4"><button onClick={openAddService} className="bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-lg transition-all">Add New Service</button></div>
             {services.map((service) => (
               <div key={service.id} className="glass-card rounded-2xl p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-bold text-white">{service.name}</h3>
-                      <span className={`text-xs px-2 py-0.5 rounded-md ${service.is_active ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>{service.is_active ? "Active" : "Inactive"}</span>
-                    </div>
+                    <div className="flex items-center gap-3 mb-2"><h3 className="text-lg font-bold text-white">{service.name}</h3><span className={`text-xs px-2 py-0.5 rounded-md ${service.is_active ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>{service.is_active ? "Active" : "Inactive"}</span></div>
                     <p className="text-zinc-400 text-sm mb-2">{service.description || "No description provided."}</p>
-                    <div className="flex gap-4 text-xs text-zinc-500">
-                      <span>Category: <span className="text-zinc-300">{service.category}</span></span>
-                      <span>Estimate: <span className="text-zinc-300">{service.estimated_hours || 1}h</span></span>
-                    </div>
+                    <div className="flex gap-4 text-xs text-zinc-500"><span>Category: <span className="text-zinc-300">{service.category}</span></span><span>Estimate: <span className="text-zinc-300">{service.estimated_hours || 1}h</span></span></div>
                   </div>
                   <p className="text-xl font-bold gradient-text ml-4">{formatRupiah(service.base_price)}</p>
                 </div>
@@ -471,20 +351,14 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Categories Tab */}
         {activeTab === "categories" && (
           <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <button onClick={openAddCategory} className="bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-lg transition-all">Add New Category</button>
-            </div>
+            <div className="flex justify-end mb-4"><button onClick={openAddCategory} className="bg-primary hover:bg-primary-hover text-white font-semibold px-5 py-2.5 rounded-lg transition-all">Add New Category</button></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {categories.map((category) => (
                 <div key={category.id} className="glass-card rounded-2xl p-6">
                   <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-bold text-white">{category.name}</h3>
-                      <p className="text-xs text-zinc-500 mt-1">slug: {category.slug}</p>
-                    </div>
+                    <div><h3 className="text-lg font-bold text-white">{category.name}</h3><p className="text-xs text-zinc-500 mt-1">slug: {category.slug}</p></div>
                     <span className={`text-xs px-2 py-0.5 rounded-md ${category.is_active ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>{category.is_active ? "Active" : "Inactive"}</span>
                   </div>
                   {category.description && <p className="text-sm text-zinc-400 mb-4">{category.description}</p>}
@@ -543,7 +417,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-
+        {/* ✅ MODAL EDIT WORKER STATS (Berfungsi Penuh) */}
         {showWorkerStatsModal && editingWorker && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-md">
@@ -562,7 +436,11 @@ export default function AdminDashboard() {
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-1">Max Capacity (Orders)</label>
                   <input type="number" min="1" max="20" value={workerStatsForm.max_capacity} onChange={(e) => setWorkerStatsForm({...workerStatsForm, max_capacity: parseInt(e.target.value) || 1})} className="input-modern w-full" />
-                  <p className="text-xs text-zinc-500 mt-1">Maximum concurrent orders this worker can handle.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-1">Current Load (Active Orders)</label>
+                  <input type="number" min="0" value={workerStatsForm.current_active_orders} onChange={(e) => setWorkerStatsForm({...workerStatsForm, current_active_orders: parseInt(e.target.value) || 0})} className="input-modern w-full" />
+                  <p className="text-xs text-zinc-500 mt-1">You can adjust this manually if the auto-sync fails.</p>
                 </div>
                 <div className="flex flex-col gap-3 pt-2">
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -577,16 +455,14 @@ export default function AdminDashboard() {
 
                 <div className="flex gap-3 pt-4">
                   <button type="button" onClick={() => setShowWorkerStatsModal(false)} className="flex-1 btn-secondary">Cancel</button>
-                  <button type="submit" disabled={savingWorkerStats} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 rounded-lg transition-all">
-                    {savingWorkerStats ? "Saving..." : "Save Changes"}
-                  </button>
+                  <button type="submit" disabled={savingWorkerStats} className="flex-1 bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 rounded-lg transition-all">{savingWorkerStats ? "Saving..." : "Save Changes"}</button>
                 </div>
               </form>
             </div>
           </div>
         )}
 
-        {/* Service Modal */}
+        {/* Service & Category Modals (Tetap sama) */}
         {(showAddService || editingService) && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -606,7 +482,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Category Modal */}
         {(showAddCategory || editingCategory) && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
             <div className="glass-card rounded-2xl p-6 w-full max-w-md">
