@@ -6,6 +6,9 @@ import OrderChat from "../components/OrderChat";
 import { compressImage } from "../lib/imageUtils";
 import { showAlert } from "../lib/dialog";
 
+// ✅ Tipe Data Baru untuk Task Checklist
+type OrderTask = Database["public"]["Tables"]["order_tasks"]["Row"];
+
 // Tipe Order dengan relasi lengkap
 type Order = Database["public"]["Tables"]["orders"]["Row"] & {
   services: {
@@ -24,11 +27,12 @@ type Order = Database["public"]["Tables"]["orders"]["Row"] & {
 };
 
 type ProgressUpdate = Database["public"]["Tables"]["progress_updates"]["Row"];
-type Review = Database["public"]["Tables"]["reviews"]["Row"]; // ✅ TAMBAHKAN TIPE REVIEW
+type Review = Database["public"]["Tables"]["reviews"]["Row"];
 
 export default function OrderTracking() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
   const [order, setOrder] = useState<Order | null>(null);
   const [progressUpdates, setProgressUpdates] = useState<ProgressUpdate[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -45,6 +49,10 @@ export default function OrderTracking() {
   const [newRating, setNewRating] = useState<number>(5);
   const [newReviewComment, setNewReviewComment] = useState<string>("");
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+
+  // ✅ State untuk Task Checklist
+  const [tasks, setTasks] = useState<OrderTask[]>([]);
+  const [updatingTask, setUpdatingTask] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrder();
@@ -101,6 +109,16 @@ export default function OrderTracking() {
 
     setProgressUpdates((progressData as ProgressUpdate[]) || []);
 
+    // ✅ Ambil data checklist tasks untuk order ini (Diurutkan: Prioritas Tinggi dulu, lalu waktu pembuatan)
+    const { data: tasksData } = await supabase
+      .from("order_tasks")
+      .select("*")
+      .eq("order_id", id)
+      .order("priority_level", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    setTasks((tasksData as OrderTask[]) || []);
+
     if (user.id === orderData.consumer_id) {
       const { data: reviewData } = await supabase
         .from("reviews")
@@ -111,6 +129,43 @@ export default function OrderTracking() {
     }
 
     setLoading(false);
+  }
+
+  // ✅ Fungsi untuk Toggle Checklist Task
+  async function handleToggleTask(taskId: string, currentStatus: boolean) {
+    setUpdatingTask(taskId);
+    try {
+      const updates: any = {
+        is_completed: !currentStatus,
+      };
+
+      // Record waktu secara otomatis
+      if (!currentStatus) {
+        updates.started_at = new Date().toISOString();
+        updates.completed_at = new Date().toISOString();
+      } else {
+        updates.completed_at = null; // Jika batal dicentang
+      }
+
+      const { error } = await supabase
+        .from("order_tasks")
+        .update(updates)
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      // Update state lokal agar UI langsung responsif
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)),
+      );
+    } catch (err) {
+      await showAlert({
+        title: "Error",
+        message: "Gagal update task.",
+        type: "danger",
+      });
+    }
+    setUpdatingTask(null);
   }
 
   async function handleProgressUpdate(e: FormEvent<HTMLFormElement>) {
@@ -128,15 +183,12 @@ export default function OrderTracking() {
     setUploadingProgress(true);
     try {
       const fileToUpload = await compressImage(progressFile);
-
       const fileName = `${order!.id}/${userRole}-${Date.now()}.jpg`;
       const filePath = `progress/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("screenshots")
-        .upload(filePath, fileToUpload, {
-          contentType: "image/jpeg",
-        });
+        .upload(filePath, fileToUpload, { contentType: "image/jpeg" });
       if (uploadError) throw uploadError;
 
       const {
@@ -208,7 +260,7 @@ export default function OrderTracking() {
         message: "Ulasan Anda telah berhasil dikirim.",
         type: "success",
       });
-      fetchOrder(); // Refresh untuk menampilkan review yang baru
+      fetchOrder();
     } catch (err) {
       await showAlert({
         title: "Error",
@@ -413,12 +465,187 @@ export default function OrderTracking() {
           )}
         </div>
 
+        <div className="glass-card rounded-2xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <svg
+                className="w-5 h-5 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                />
+              </svg>
+              Task Checklist & Priority
+            </h3>
+            <span className="text-xs text-zinc-400">
+              {tasks.filter((t) => t.is_completed).length} / {tasks.length}{" "}
+              Selesai
+            </span>
+          </div>
+
+          {tasks.length === 0 ? (
+            <div className="text-center py-8 bg-surface/30 rounded-xl border border-border border-dashed">
+              <p className="text-zinc-500 text-sm">
+                Belum ada task yang ditambahkan.
+              </p>
+              <p className="text-zinc-600 text-xs mt-1">
+                Admin/Worker akan menambahkan detail tugas di sini.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tasks.map((task) => {
+                const isHighPriority = task.priority_level === "high";
+                const isCompleted = task.is_completed ?? false; 
+
+                return (
+                  <div
+                    key={task.id}
+                    className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${
+                      isCompleted
+                        ? "bg-green-500/5 border-green-500/20"
+                        : "bg-surface/50 border-border hover:border-primary/30"
+                    }`}
+                  >
+                    <button
+                      onClick={() => handleToggleTask(task.id, isCompleted)} // Sekarang aman dari error TypeScript
+                      disabled={
+                        updatingTask === task.id || userRole === "consumer"
+                      }
+                      className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${
+                        isCompleted
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "border-zinc-600 hover:border-primary bg-zinc-900"
+                      }`}
+                    >
+                      {updatingTask === task.id ? (
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : isCompleted ? (
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={3}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      ) : null}
+                    </button>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4
+                          className={`font-medium text-sm ${isCompleted ? "text-zinc-500 line-through" : "text-white"}`}
+                        >
+                          {task.task_name}
+                        </h4>
+                        {isHighPriority && !isCompleted && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 uppercase tracking-wider">
+                            Prioritas Tinggi
+                          </span>
+                        )}
+                      </div>
+
+                      {task.description && (
+                        <p
+                          className={`text-xs mb-2 ${isCompleted ? "text-zinc-600" : "text-zinc-400"}`}
+                        >
+                          {task.description}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-3 text-[11px] text-zinc-500">
+                        <span className="flex items-center gap-1">
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          Est: {task.estimated_mins ?? 0} menit
+                        </span>
+                        {task.started_at && (
+                          <span className="flex items-center gap-1 text-blue-400">
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            Mulai:{" "}
+                            {new Date(task.started_at).toLocaleTimeString(
+                              "id-ID",
+                              { hour: "2-digit", minute: "2-digit" },
+                            )}
+                          </span>
+                        )}
+                        {task.completed_at && (
+                          <span className="flex items-center gap-1 text-green-400">
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            Selesai:{" "}
+                            {new Date(task.completed_at).toLocaleTimeString(
+                              "id-ID",
+                              { hour: "2-digit", minute: "2-digit" },
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Progress Updates Timeline */}
         <div className="glass-card rounded-2xl p-6 mb-6">
           <h3 className="text-lg font-bold text-white mb-6">
             Progress Updates
           </h3>
-
           {progressUpdates.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-zinc-500">No progress updates yet.</p>
@@ -467,6 +694,7 @@ export default function OrderTracking() {
           )}
         </div>
 
+        {/* Review Section */}
         {order.status === "completed" &&
           currentUserId === order.consumer_id && (
             <div className="glass-card rounded-2xl p-6 mb-6 border border-primary/20">
@@ -553,8 +781,8 @@ export default function OrderTracking() {
             </div>
           )}
 
+        {/* Chat & Action Buttons */}
         <div className="flex flex-col gap-6">
-          {/* Chat Section */}
           {(order.consumer_id === currentUserId ||
             order.worker_id === currentUserId ||
             userRole === "admin") && (
@@ -565,7 +793,6 @@ export default function OrderTracking() {
             />
           )}
 
-          {/* Action Buttons Area */}
           <div className="flex gap-3">
             <button
               onClick={() => navigate(-1)}
@@ -573,7 +800,6 @@ export default function OrderTracking() {
             >
               ← Go Back
             </button>
-
             {(userRole === "worker" || userRole === "admin") &&
               order.status !== "completed" &&
               order.status !== "cancelled" && (
@@ -601,7 +827,6 @@ export default function OrderTracking() {
               <p className="text-zinc-400 text-sm mb-6">
                 {order!.services?.name}
               </p>
-
               <form onSubmit={handleProgressUpdate} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-2">
@@ -620,7 +845,6 @@ export default function OrderTracking() {
                     <option value={100}>100% (Selesai)</option>
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-2">
                     Screenshot Bukti (Wajib)
@@ -638,7 +862,6 @@ export default function OrderTracking() {
                     Large images will be compressed automatically to save space.
                   </p>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-2">
                     Catatan (Opsional)
@@ -653,7 +876,6 @@ export default function OrderTracking() {
                     className="input-modern w-full resize-none"
                   />
                 </div>
-
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
