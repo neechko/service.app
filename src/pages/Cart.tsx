@@ -25,10 +25,12 @@ export default function Cart() {
 
     setCheckoutLoading(true);
     try {
+      // ✅ PERBAIKAN: Simpan total_estimated_hours ke database
       const ordersToInsert = items.map(item => ({
         consumer_id: user.id,
         service_id: item.serviceId,
         total_price: item.price,
+        total_estimated_hours: item.estimatedHours, // <--- INI KUNCINYA
         game_uid: item.gameUid,
         game_server: item.gameServer,
         notes: `Packages: ${item.tierNames.join(', ')}. Notes: ${item.notes || ''}`,

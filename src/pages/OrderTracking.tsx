@@ -104,7 +104,14 @@ export default function OrderTracking() {
     if (!order || !currentUserId) return;
     setSubmittingReview(true);
     try {
-      const { error } = await supabase.from("reviews").insert([{ order_id: order.id, reviewer_id: currentUserId, reviewee_id: order.worker_id, rating: newRating, comment: newReviewComment.trim() }]);
+      const { error } = await supabase.from("reviews").insert([{ 
+        order_id: order.id, 
+        reviewer_id: currentUserId, 
+        reviewee_id: order.worker_id, 
+        service_id: order.service_id, // ✅ Pastikan service_id terkirim
+        rating: newRating, 
+        comment: newReviewComment.trim() 
+      }]);
       if (error) throw error;
       await showAlert({ title: "Thank You!", message: "Your review has been submitted.", type: "success" });
       fetchOrder();
@@ -184,7 +191,7 @@ export default function OrderTracking() {
           )}
         </div>
 
-        {/* ✅ AUTOMATED TIMELINE & DEADLINE TRACKER (Pengganti Checklist Manual) */}
+        {/* ✅ AUTOMATED TIMELINE (Menggunakan total_estimated_hours) */}
         <div className="glass-card rounded-2xl p-6 mb-6 border border-border">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
             <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -196,7 +203,6 @@ export default function OrderTracking() {
           {!order.assigned_at ? (
             <div className="text-center py-6 bg-surface/30 rounded-xl border border-border border-dashed">
               <p className="text-zinc-500 text-sm">Order has not been assigned to a worker yet.</p>
-              <p className="text-zinc-600 text-xs mt-1">Timeline will be generated automatically upon assignment.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -218,7 +224,8 @@ export default function OrderTracking() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white">Estimated Duration</p>
-                  <p className="text-xs text-zinc-400">{order.services?.estimated_hours || 1} Hours (Based on Service Package)</p>
+                  {/* ✅ PERBAIKAN: Gunakan total_estimated_hours dari order */}
+                  <p className="text-xs text-zinc-400">{order.total_estimated_hours || order.services?.estimated_hours || 1} Hours (Total from selected packages)</p>
                 </div>
               </div>
 
@@ -263,7 +270,7 @@ export default function OrderTracking() {
         <div className="glass-card rounded-2xl p-6 mb-6">
           <h3 className="text-lg font-bold text-white mb-6">Progress Updates</h3>
           {progressUpdates.length === 0 ? (
-            <div className="text-center py-8"><p className="text-zinc-500">No progress updates yet.</p><p className="text-zinc-600 text-sm mt-1">The worker will upload progress here.</p></div>
+            <div className="text-center py-8"><p className="text-zinc-500">No progress updates yet.</p></div>
           ) : (
             <div className="space-y-6">
               {progressUpdates.map((update) => (
@@ -293,7 +300,6 @@ export default function OrderTracking() {
                   {[1, 2, 3, 4, 5].map((star) => (<svg key={star} className={`w-5 h-5 ${star <= (existingReview.rating || 0) ? "text-yellow-400" : "text-zinc-600"}`} fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>))}
                 </div>
                 <p className="text-zinc-300 italic">"{existingReview.comment}"</p>
-                <p className="text-zinc-500 text-xs mt-2">Reviewed on {formatDate(existingReview.created_at)}</p>
               </div>
             ) : (
               <form onSubmit={handleSubmitReview} className="space-y-4">
@@ -305,7 +311,7 @@ export default function OrderTracking() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Comment (Optional)</label>
-                  <textarea value={newReviewComment} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNewReviewComment(e.target.value)} rows={3} className="input-modern w-full resize-none" placeholder="How was your experience with this worker?" />
+                  <textarea value={newReviewComment} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNewReviewComment(e.target.value)} rows={3} className="input-modern w-full resize-none" placeholder="How was your experience?" />
                 </div>
                 <button type="submit" disabled={submittingReview} className="bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-semibold py-2.5 px-6 rounded-lg transition-all">{submittingReview ? "Submitting..." : "Submit Review"}</button>
               </form>
@@ -340,7 +346,6 @@ export default function OrderTracking() {
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Screenshot Proof (Required)</label>
                   <input type="file" accept="image/*" onChange={(e: ChangeEvent<HTMLInputElement>) => setProgressFile(e.target.files?.[0] || null)} required className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-2.5 text-zinc-100 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary-hover" />
-                  <p className="text-xs text-zinc-500 mt-1">Large images will be compressed automatically.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-300 mb-2">Notes (Optional)</label>
