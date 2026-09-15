@@ -3,10 +3,10 @@ import { createContext, useContext, useState, ReactNode } from 'react';
 export interface CartItem {
   serviceId: string;
   serviceName: string;
-  tierId: string;
-  tierName: string;
-  price: number;
-  estimatedHours: number;
+  tierIds: string[];
+  tierNames: string[];
+  price: number; // Total harga (sudah dijumlahkan dari semua package)
+  estimatedHours: number; // Total estimasi jam
   gameUid?: string;
   gameServer?: string;
   notes?: string;

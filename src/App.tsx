@@ -14,7 +14,8 @@ import WorkerDashboard from './pages/WorkerDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
 import HowToOrder from './pages/HowToOrder'
-import Cart from './pages/Cart' 
+import Cart from './pages/Cart'
+import ServiceReviews from './pages/ServiceReviews'; 
 
 import { CartProvider, useCart } from './context/CartContext'
 
@@ -250,6 +251,7 @@ function AppContent() {
         
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
+        <Route path="/service/:id/reviews" element={<ServiceReviews />} />
       </Routes>
     </BrowserRouter>
   )

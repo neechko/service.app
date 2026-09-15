@@ -12,12 +12,13 @@ Built with a focus on **fairness, transparency, and automation**, the platform f
 ## Key Features
 
 ### Consumer Experience
-- **Dynamic Service Packages**: Choose from multiple tiers (e.g., Regular, Express, Premium) with dynamic pricing, similar to modern e-commerce platforms.
+- **Multi-Package Selection**: Services can contain multiple packages (e.g., "Archon Quest Part 1", "Part 2"). Customers can select one or multiple packages to combine into a single order, with prices summed automatically.
 - **Shopping Cart System**: Add multiple services to a cart, input game credentials (UID/Server) per item, and checkout in a single, seamless transaction.
-- **Automated Timeline Tracker**: Real-time visual progress bar showing "Time Elapsed" and "Target Deadline" (with **ON TRACK** / **OVERDUE** indicators) for complete transparency.
-- **Public Reviews & Ratings**: Leave star ratings and comments after order completion, which are displayed publicly on service pages to build community trust.
+- **Automated Timeline Tracker**: Real-time visual progress bar showing "Time Elapsed" and "Target Deadline" (with **ON TR…complete transparency.
+- **Public Reviews & Ratings**: Leave star ratings and comments after order completion. Reviews are displayed publicly on a dedicated page per service, with a preview of the 3 most recent reviews on the service detail page.
 - **Order Cancellation**: Cancel pending/paid orders with a logged reason, visible in both the order list and detail views.
-- **Interactive "How to Order" Guide**: A dedicated, professionally designed page outlining the process and legal disclaimers.
+- **Interactive "How to Order" Guide**: A dedicated page outlining the process, multi-package mechanics, and legal disclaimers.
+
 
 ### Worker Efficiency
 - **Smart Dashboard**: View assigned orders with clear customer details, game credentials, and chat history.

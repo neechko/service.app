@@ -17,7 +17,6 @@ export default function Cart() {
       return;
     }
 
-    // Validasi UID & Server
     const incompleteItems = items.filter(item => !item.gameUid || !item.gameServer);
     if (incompleteItems.length > 0) {
       await showAlert({ title: 'Incomplete Details', message: 'Please fill in Game UID and Server for all items.', type: 'warning' });
@@ -32,7 +31,7 @@ export default function Cart() {
         total_price: item.price,
         game_uid: item.gameUid,
         game_server: item.gameServer,
-        notes: `${item.tierName} Package. Notes: ${item.notes || ''}`,
+        notes: `Packages: ${item.tierNames.join(', ')}. Notes: ${item.notes || ''}`,
         status: 'pending',
         current_percentage: 0
       }));
@@ -48,6 +47,9 @@ export default function Cart() {
     }
     setCheckoutLoading(false);
   };
+
+  const formatRupiah = (angka: number) =>
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
 
   if (items.length === 0) {
     return (
@@ -65,21 +67,27 @@ export default function Cart() {
     <div className="min-h-screen bg-background pb-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold text-white mb-8">Shopping Cart</h1>
-        
+
         <div className="space-y-4 mb-8">
           {items.map((item, index) => (
             <div key={index} className="glass-card rounded-2xl p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-bold text-white">{item.serviceName}</h3>
-                  <p className="text-primary font-medium">{item.tierName} Package</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {item.tierNames.map((name, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-md border border-primary/30">
+                        {name}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xl font-bold text-white">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(item.price)}</p>
+                  <p className="text-xl font-bold text-white">{formatRupiah(item.price)}</p>
                   <button onClick={() => removeFromCart(index)} className="text-xs text-red-400 hover:text-red-300 mt-1">Remove</button>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs text-zinc-400 mb-1">Game UID *</label>
@@ -101,7 +109,7 @@ export default function Cart() {
         <div className="glass-card rounded-2xl p-6 sticky bottom-4 border border-primary/20">
           <div className="flex justify-between items-center mb-4">
             <span className="text-lg text-zinc-300">Total Amount:</span>
-            <span className="text-3xl font-bold text-primary">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(totalPrice)}</span>
+            <span className="text-3xl font-bold text-primary">{formatRupiah(totalPrice)}</span>
           </div>
           <button onClick={handleCheckout} disabled={checkoutLoading} className="w-full bg-primary hover:bg-primary-hover disabled:bg-zinc-800 text-white font-bold py-3 rounded-xl transition-all">
             {checkoutLoading ? 'Processing...' : 'Checkout Now'}
