@@ -102,6 +102,9 @@ function App() {
               {user ? (
                 // Menu jika SUDAH LOGIN
                 <>
+                  {/* ✅ TAMBAHAN: Link How to Order untuk user yang login */}
+                  <Link to="/how-to-order" className="btn-ghost text-sm">How to Order</Link>
+                  
                   {profile?.role === 'consumer' && (
                     <Link to="/orders" className="btn-ghost text-sm">My Orders</Link>
                   )}
@@ -133,6 +136,8 @@ function App() {
               ) : (
                 // Menu jika BELUM LOGIN
                 <>
+                  {/* ✅ TAMBAHAN: Link How to Order untuk user yang belum login */}
+                  <Link to="/how-to-order" className="btn-ghost text-sm">How to Order</Link>
                   <Link to="/login" className="btn-ghost text-sm">Sign In</Link>
                   <Link to="/register" className="bg-primary hover:bg-primary-hover text-white font-semibold px-4 py-2 rounded-lg text-sm transition-all">
                     Register
@@ -157,6 +162,9 @@ function App() {
             <div className="md:hidden py-4 border-t border-border space-y-2 fade-in">
               {user ? (
                 <>
+                  {/* ✅ TAMBAHAN: Link How to Order di Mobile Menu (Login) */}
+                  <Link to="/how-to-order" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">How to Order</Link>
+                  
                   {profile?.role === 'consumer' && (
                     <Link to="/orders" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">My Orders</Link>
                   )}
@@ -171,6 +179,8 @@ function App() {
                 </>
               ) : (
                 <>
+                  {/* ✅ TAMBAHAN: Link How to Order di Mobile Menu (Belum Login) */}
+                  <Link to="/how-to-order" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">How to Order</Link>
                   <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-zinc-300 hover:bg-surface-hover rounded-lg">Sign In</Link>
                   <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-primary hover:bg-surface-hover rounded-lg font-medium">Register</Link>
                 </>
